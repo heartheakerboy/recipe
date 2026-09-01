@@ -47,3 +47,50 @@ export function parseIsoDurationToMinutes(durationStr: string | null | undefined
 
   return minutes;
 }
+
+/**
+ * Intelligent Recipe Timing Sanitizer
+ * Ensures active cooking time is distinguished from multi-day marination or erroneous numbers (e.g. 27 hrs 10 mins).
+ */
+export function sanitizeCookingTimes(
+  rawPrep: number,
+  rawCook: number,
+  rawTotal: number
+): { prepTimeMinutes: number; cookTimeMinutes: number; totalTimeMinutes: number } {
+  let prep = Math.max(0, rawPrep || 0);
+  let cook = Math.max(0, rawCook || 0);
+  let total = Math.max(0, rawTotal || 0);
+
+  // 1. If total is zero or missing, calculate from prep + cook
+  if (total === 0 && (prep > 0 || cook > 0)) {
+    total = prep + cook;
+  }
+
+  // 2. If prep + cook is realistic (< 300 mins) but total is huge (> 720 mins = 12+ hrs, e.g. overnight chilling / marinating)
+  if (total > 720 && prep + cook > 0 && prep + cook <= 360) {
+    total = prep + cook;
+  }
+
+  // 3. If prep or cook alone is huge (> 720 mins)
+  if (prep > 720) prep = 15;
+  if (cook > 720) cook = 30;
+
+  // 4. Fallback defaults if all are 0
+  if (prep === 0 && cook === 0 && total === 0) {
+    prep = 15;
+    cook = 25;
+    total = 40;
+  } else if (total === 0) {
+    total = (prep || 15) + (cook || 20);
+  } else if (prep === 0 && cook === 0 && total > 0 && total <= 360) {
+    prep = Math.max(5, Math.round(total * 0.35));
+    cook = total - prep;
+  }
+
+  // 5. Ensure total is at least prep + cook
+  if (total < prep + cook) {
+    total = prep + cook;
+  }
+
+  return { prepTimeMinutes: prep, cookTimeMinutes: cook, totalTimeMinutes: total };
+}

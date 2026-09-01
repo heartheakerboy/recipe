@@ -134,17 +134,38 @@ export class PipelineOrchestrator {
         const styleRec = selectEditorialStyle(dna);
         const generated = await generateEditorialContent(recipe, dna, facts, styleRec.primaryStyle);
 
+        const existingCardData = recipe.recipeCardData || {};
+
         await recipeRepository.update(recipeId, {
           title: generated.title,
+          slug: generated.slug,
           shortDescription: generated.shortDescription,
           introduction: generated.introduction,
+          instructions: generated.instructions,
+          prepTimeMinutes: generated.prepTimeMinutes ?? recipe.prepTimeMinutes,
+          cookTimeMinutes: generated.cookTimeMinutes ?? recipe.cookTimeMinutes,
+          totalTimeMinutes: generated.totalTimeMinutes ?? recipe.totalTimeMinutes,
           editorialStyle: styleRec.primaryStyle,
           seoTitle: generated.seoTitle,
           metaDescription: generated.metaDescription,
+          recipeCardData: {
+            ...existingCardData,
+            storageInstructions: generated.storageInstructions,
+            reheatingInstructions: generated.reheatingInstructions,
+            makeAheadTips: generated.makeAheadTips,
+            chefTips: generated.chefTips,
+            variations: generated.variations,
+            substitutions: generated.substitutions,
+            servingPairings: generated.servingPairings,
+            whyYoullLoveThis: generated.whyYoullLoveThis,
+            scienceWhyItWorks: generated.scienceWhyItWorks,
+            equipmentNeeded: generated.equipmentNeeded,
+          },
+          faq: generated.faq,
         });
 
         budgetGuard.recordAiSpend(0.04);
-        this.recordActivity(recipeId, `Editorial content generated (${styleRec.primaryStyle})`, 'content_generation', 'success', 'ai');
+        this.recordActivity(recipeId, `Editorial content generated (${styleRec.primaryStyle}) - instructions rewritten & times sanitized`, 'content_generation', 'success', 'ai');
         return { success: true };
       }
 

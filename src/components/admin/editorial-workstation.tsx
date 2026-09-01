@@ -494,6 +494,57 @@ export function EditorialWorkstation({
                     className="w-full px-4 py-2 rounded-xl bg-editorial-surface border border-editorial-border text-xs sm:text-sm text-editorial-text"
                   />
                 </div>
+
+                {/* Timing Inputs (Minutes) */}
+                <div className="grid grid-cols-3 gap-3 pt-2 border-t border-editorial-border">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-editorial-muted mb-1">
+                      Prep Time (Mins)
+                    </label>
+                    <input
+                      type="number"
+                      value={content.prepTimeMinutes ?? 15}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10) || 0;
+                        setContent({
+                          ...content,
+                          prepTimeMinutes: val,
+                          totalTimeMinutes: val + (content.cookTimeMinutes ?? 20),
+                        });
+                      }}
+                      className="w-full px-3 py-1.5 rounded-xl bg-editorial-surface border border-editorial-border text-xs font-bold text-editorial-text"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-editorial-muted mb-1">
+                      Cook Time (Mins)
+                    </label>
+                    <input
+                      type="number"
+                      value={content.cookTimeMinutes ?? 20}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10) || 0;
+                        setContent({
+                          ...content,
+                          cookTimeMinutes: val,
+                          totalTimeMinutes: (content.prepTimeMinutes ?? 15) + val,
+                        });
+                      }}
+                      className="w-full px-3 py-1.5 rounded-xl bg-editorial-surface border border-editorial-border text-xs font-bold text-editorial-text"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-brand-600 mb-1">
+                      Total Time (Mins)
+                    </label>
+                    <input
+                      type="number"
+                      value={content.totalTimeMinutes ?? 35}
+                      onChange={(e) => setContent({ ...content, totalTimeMinutes: parseInt(e.target.value, 10) || 0 })}
+                      className="w-full px-3 py-1.5 rounded-xl bg-brand-50 border border-brand-200 text-xs font-bold text-brand-700"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Section 2: Introduction Story (2–4 Paragraphs) */}
@@ -621,6 +672,63 @@ export function EditorialWorkstation({
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {/* Section 3.7: Rewritten Step-by-Step Instructions */}
+              {Array.isArray(content.instructions) && content.instructions.length > 0 && (
+                <div className="bg-white rounded-3xl border border-editorial-border p-6 sm:p-7 shadow-sm space-y-4">
+                  <h3 className="font-serif text-base font-bold text-editorial-text flex items-center gap-2 border-b border-editorial-border pb-3">
+                    <Utensils className="w-4 h-4 text-brand-500" />
+                    <span>Rewritten Step-by-Step Instructions (Original Editorial Copy)</span>
+                  </h3>
+                  <div className="space-y-4">
+                    {content.instructions.map((step, idx) => (
+                      <div key={idx} className="p-4 rounded-2xl bg-editorial-surface border border-editorial-border space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-brand-500 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                            {step.stepNumber || idx + 1}
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="Step Title (e.g. Prep & Season)"
+                            value={step.title || ''}
+                            onChange={(e) => {
+                              const updated = [...content.instructions];
+                              updated[idx] = { ...updated[idx], title: e.target.value };
+                              setContent({ ...content, instructions: updated });
+                            }}
+                            className="flex-1 font-bold text-xs bg-white px-3 py-1.5 rounded-lg border border-editorial-border"
+                          />
+                        </div>
+                        <textarea
+                          rows={3}
+                          placeholder="Detailed instruction text..."
+                          value={step.instructionText}
+                          onChange={(e) => {
+                            const updated = [...content.instructions];
+                            updated[idx] = { ...updated[idx], instructionText: e.target.value };
+                            setContent({ ...content, instructions: updated });
+                          }}
+                          className="w-full text-xs text-editorial-text bg-white px-3 py-2 rounded-lg border border-editorial-border leading-relaxed"
+                        />
+                        <div className="flex items-center gap-2">
+                          <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          <input
+                            type="text"
+                            placeholder="Step Chef Tip (optional)"
+                            value={step.tip || ''}
+                            onChange={(e) => {
+                              const updated = [...content.instructions];
+                              updated[idx] = { ...updated[idx], tip: e.target.value };
+                              setContent({ ...content, instructions: updated });
+                            }}
+                            className="flex-1 text-[11px] text-amber-900 bg-amber-50/50 px-2.5 py-1 rounded border border-amber-200"
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

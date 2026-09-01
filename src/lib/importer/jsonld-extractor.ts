@@ -1,4 +1,4 @@
-import { parseIsoDurationToMinutes } from './time-parser';
+import { parseIsoDurationToMinutes, sanitizeCookingTimes } from './time-parser';
 import { normalizeIngredientList } from './ingredient-normalizer';
 import type { RecipeIngredient, RecipeInstruction } from '../types/recipe';
 
@@ -262,12 +262,14 @@ export function extractRecipeFromJsonLd(html: string): ExtractedJsonLdRecipe | n
         );
 
         // Extract Times
-        const prepTimeMinutes = parseIsoDurationToMinutes(recipeNode.prepTime);
-        const cookTimeMinutes = parseIsoDurationToMinutes(recipeNode.cookTime);
-        let totalTimeMinutes = parseIsoDurationToMinutes(recipeNode.totalTime);
-        if (!totalTimeMinutes && (prepTimeMinutes || cookTimeMinutes)) {
-          totalTimeMinutes = (prepTimeMinutes || 0) + (cookTimeMinutes || 0);
-        }
+        const rawPrep = parseIsoDurationToMinutes(recipeNode.prepTime);
+        const rawCook = parseIsoDurationToMinutes(recipeNode.cookTime);
+        const rawTotal = parseIsoDurationToMinutes(recipeNode.totalTime);
+        const { prepTimeMinutes, cookTimeMinutes, totalTimeMinutes } = sanitizeCookingTimes(
+          rawPrep,
+          rawCook,
+          rawTotal
+        );
 
         // Extract Servings
         const servings = extractServingsFromJsonLd(recipeNode.recipeYield || recipeNode.yield);
