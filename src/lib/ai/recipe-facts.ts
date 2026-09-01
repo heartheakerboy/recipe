@@ -93,8 +93,8 @@ export function createRecipeFactsLock(recipe: Recipe): RecipeFactsLock {
 export function verifyRecipeFactsIntegrity(
   lockedFacts: RecipeFactsLock,
   generated: {
-    ingredients: RecipeIngredient[];
-    instructions: RecipeInstruction[];
+    ingredients?: RecipeIngredient[];
+    instructions?: RecipeInstruction[];
     prepTimeMinutes?: number;
     cookTimeMinutes?: number;
     totalTimeMinutes?: number;
@@ -104,13 +104,18 @@ export function verifyRecipeFactsIntegrity(
   const discrepancies: string[] = [];
   const warnings: string[] = [];
 
+  const genIngs = Array.isArray(generated?.ingredients) ? generated.ingredients : (lockedFacts?.ingredients || []);
+  const genInsts = Array.isArray(generated?.instructions) ? generated.instructions : (lockedFacts?.instructions || []);
+  const originalIngs = Array.isArray(lockedFacts?.ingredients) ? lockedFacts.ingredients : [];
+  const originalInsts = Array.isArray(lockedFacts?.instructions) ? lockedFacts.instructions : [];
+
   // 1. Check Ingredient Completeness
   let matchedIngredients = 0;
-  for (const original of lockedFacts.ingredients) {
-    const origItemLower = original.item.toLowerCase();
-    const found = generated.ingredients.some((gen) => {
-      const genRawLower = gen.rawText.toLowerCase();
-      const genItemLower = gen.item.toLowerCase();
+  for (const original of originalIngs) {
+    const origItemLower = (original.item || '').toLowerCase();
+    const found = genIngs.some((gen) => {
+      const genRawLower = (gen.rawText || '').toLowerCase();
+      const genItemLower = (gen.item || '').toLowerCase();
       return genRawLower.includes(origItemLower) || genItemLower.includes(origItemLower) || origItemLower.includes(genItemLower);
     });
 
@@ -122,17 +127,17 @@ export function verifyRecipeFactsIntegrity(
   }
 
   // Check for unexpected hallucinated ingredients
-  if (generated.ingredients.length > lockedFacts.ingredients.length + 2) {
-    warnings.push(`Generated recipe contains ${generated.ingredients.length} ingredients (expected ${lockedFacts.ingredients.length}). Ensure no unrelated ingredients were added.`);
+  if (genIngs.length > originalIngs.length + 2) {
+    warnings.push(`Generated recipe contains ${genIngs.length} ingredients (expected ${originalIngs.length}). Ensure no unrelated ingredients were added.`);
   }
 
-  const ingredientMatchRate = lockedFacts.ingredients.length > 0
-    ? matchedIngredients / lockedFacts.ingredients.length
+  const ingredientMatchRate = originalIngs.length > 0
+    ? matchedIngredients / originalIngs.length
     : 1;
 
   // 2. Check Instruction Step Count & Core Content
-  const originalStepCount = lockedFacts.instructions.length;
-  const generatedStepCount = generated.instructions.length;
+  const originalStepCount = originalInsts.length;
+  const generatedStepCount = genInsts.length;
 
   let instructionMatchRate = 1.0;
   if (generatedStepCount === 0 && originalStepCount > 0) {

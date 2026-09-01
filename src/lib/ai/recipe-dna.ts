@@ -115,21 +115,39 @@ export async function analyzeRecipeDNA(
 ): Promise<RecipeDNA> {
   const fallback = () => extractRuleBasedRecipeDNA(recipe);
 
-  return provider.generateStructuredContent<RecipeDNA>({
-    systemPrompt: `You are an expert culinary analyst extracting deep structured Recipe DNA. You must analyze the core culinary components of the given recipe accurately without hallucinating unsupported attributes.`,
-    userPrompt: `Extract Recipe DNA for the following recipe:
+  try {
+    const rawDna = await provider.generateStructuredContent<Partial<RecipeDNA>>({
+      systemPrompt: `You are an expert culinary analyst extracting deep structured Recipe DNA. You must analyze the core culinary components of the given recipe accurately without hallucinating unsupported attributes.`,
+      userPrompt: `Extract Recipe DNA for the following recipe:
 Title: ${recipe.title}
 Category: ${recipe.primaryCategorySlug}
 Cooking Method: ${recipe.cookingMethod}
 Total Time: ${recipe.totalTimeMinutes} minutes
 Servings: ${recipe.servings}
 Ingredients:
-${recipe.ingredients.map((i) => `- ${i.rawText}`).join('\n')}
+${(recipe.ingredients || []).map((i) => `- ${i.rawText || i.item}`).join('\n')}
 
 Instructions:
-${recipe.instructions.map((ins) => `${ins.stepNumber}. ${ins.instructionText}`).join('\n')}
+${(recipe.instructions || []).map((ins) => `${ins.stepNumber}. ${ins.instructionText || ''}`).join('\n')}
 
 Provide JSON output with keys: coreDish, primaryProtein, mealType, cuisine, cookingMethod, difficulty, totalTimeMinutes, servings, keyIngredients, flavorProfile, textureProfile, equipment, dietaryAttributes, seasonality, occasion, searchThemes.`,
-    fallbackGenerator: fallback,
-  });
+      fallbackGenerator: fallback,
+    });
+
+    const base = fallback();
+    return {
+      ...base,
+      ...rawDna,
+      keyIngredients: Array.isArray(rawDna?.keyIngredients) && rawDna.keyIngredients.length > 0 ? rawDna.keyIngredients : base.keyIngredients,
+      flavorProfile: Array.isArray(rawDna?.flavorProfile) && rawDna.flavorProfile.length > 0 ? rawDna.flavorProfile : base.flavorProfile,
+      textureProfile: Array.isArray(rawDna?.textureProfile) && rawDna.textureProfile.length > 0 ? rawDna.textureProfile : base.textureProfile,
+      equipment: Array.isArray(rawDna?.equipment) && rawDna.equipment.length > 0 ? rawDna.equipment : base.equipment,
+      dietaryAttributes: Array.isArray(rawDna?.dietaryAttributes) ? rawDna.dietaryAttributes : base.dietaryAttributes,
+      seasonality: Array.isArray(rawDna?.seasonality) ? rawDna.seasonality : base.seasonality,
+      occasion: Array.isArray(rawDna?.occasion) ? rawDna.occasion : base.occasion,
+      searchThemes: Array.isArray(rawDna?.searchThemes) ? rawDna.searchThemes : base.searchThemes,
+    };
+  } catch {
+    return fallback();
+  }
 }

@@ -141,12 +141,19 @@ export interface StyleRecommendation {
   confidence: number;
 }
 
-export function selectEditorialStyle(dna: RecipeDNA): StyleRecommendation {
-  const is30Min = dna.totalTimeMinutes <= 30;
-  const isOnePot = dna.cookingMethod.includes('One-Pot') || dna.cookingMethod.includes('Skillet');
-  const isSlowCooker = dna.cookingMethod.includes('Slow Cooker');
-  const hasApplesOrSquash = dna.keyIngredients.some((i) => i.includes('apple') || i.includes('squash') || i.includes('pumpkin'));
-  const isAirFryer = dna.cookingMethod.includes('Air Fryer');
+export function selectEditorialStyle(dna?: Partial<RecipeDNA> | null): StyleRecommendation {
+  const totalTimeMinutes = dna?.totalTimeMinutes ?? 30;
+  const cookingMethod = (dna?.cookingMethod || '').toLowerCase();
+  const keyIngredients = Array.isArray(dna?.keyIngredients) ? dna.keyIngredients : [];
+  const flavorProfile = Array.isArray(dna?.flavorProfile) ? dna.flavorProfile : [];
+  const textureProfile = Array.isArray(dna?.textureProfile) ? dna.textureProfile : [];
+  const difficulty = dna?.difficulty || 'Easy';
+
+  const is30Min = totalTimeMinutes <= 30;
+  const isOnePot = cookingMethod.includes('one-pot') || cookingMethod.includes('skillet') || cookingMethod.includes('dutch oven');
+  const isSlowCooker = cookingMethod.includes('slow cooker') || cookingMethod.includes('crockpot');
+  const hasApplesOrSquash = keyIngredients.some((i) => typeof i === 'string' && (i.includes('apple') || i.includes('squash') || i.includes('pumpkin')));
+  const isAirFryer = cookingMethod.includes('air fryer');
 
   if (hasApplesOrSquash) {
     return {
@@ -161,12 +168,12 @@ export function selectEditorialStyle(dna: RecipeDNA): StyleRecommendation {
     return {
       primaryStyle: 'quick-easy',
       secondaryStyle: 'family-favorite',
-      reason: `Quick cooking time (${dna.totalTimeMinutes} minutes) and single-vessel ${dna.cookingMethod} method make this ideal for speed and simplicity.`,
+      reason: `Quick cooking time (${totalTimeMinutes} minutes) and single-vessel method make this ideal for speed and simplicity.`,
       confidence: 0.94,
     };
   }
 
-  if (isSlowCooker || dna.flavorProfile.includes('rich') || dna.textureProfile.includes('fork-tender')) {
+  if (isSlowCooker || flavorProfile.some((f) => typeof f === 'string' && f.includes('rich')) || textureProfile.some((t) => typeof t === 'string' && t.includes('fork-tender'))) {
     return {
       primaryStyle: 'comfort-food',
       secondaryStyle: 'family-favorite',
@@ -175,7 +182,7 @@ export function selectEditorialStyle(dna: RecipeDNA): StyleRecommendation {
     };
   }
 
-  if (dna.difficulty === 'Easy' && dna.keyIngredients.length <= 4) {
+  if (difficulty === 'Easy' && keyIngredients.length <= 4) {
     return {
       primaryStyle: 'beginner-friendly',
       secondaryStyle: 'quick-easy',

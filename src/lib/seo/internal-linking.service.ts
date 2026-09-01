@@ -36,7 +36,9 @@ export class InternalLinkingService {
       }
 
       // 2. Shared Categories (+20 pts)
-      const sharedCat = candidate.categorySlugs.some((c) => targetRecipe.categorySlugs.includes(c));
+      const candCats = candidate.categorySlugs || [];
+      const targetCats = targetRecipe.categorySlugs || [];
+      const sharedCat = candCats.some((c) => targetCats.includes(c));
       if (sharedCat && candidate.primaryCategorySlug !== targetRecipe.primaryCategorySlug) {
         score += 20;
         factors.push('Shared category tag');

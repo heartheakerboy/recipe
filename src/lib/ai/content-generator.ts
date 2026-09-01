@@ -201,15 +201,33 @@ DNA: ${JSON.stringify(dna)}
 Facts:
 - Total Time: ${facts.totalTimeMinutes} mins (Prep: ${facts.prepTimeMinutes}m, Cook: ${facts.cookTimeMinutes}m)
 - Servings: ${facts.servings}
-- Ingredients: ${facts.ingredients.map((i) => i.rawText).join('; ')}
-- Steps: ${facts.instructions.map((i) => `${i.stepNumber}. ${i.text}`).join(' ')}
+- Ingredients: ${(facts.ingredients || []).map((i) => i.rawText || i.item).join('; ')}
+- Steps: ${(facts.instructions || []).map((i) => `${i.stepNumber}. ${i.text}`).join(' ')}
 
 Required JSON fields:
 title, slug, shortDescription, introduction, whyYoullLoveThis, chefTips, substitutions, servingPairings, storageInstructions, reheatingInstructions, makeAheadTips, faq, seoTitle, metaDescription, pinterestMetadata.`;
 
-  return provider.generateStructuredContent<GeneratedEditorialContent>({
-    systemPrompt,
-    userPrompt,
-    fallbackGenerator: fallback,
-  });
+  try {
+    const raw = await provider.generateStructuredContent<Partial<GeneratedEditorialContent>>({
+      systemPrompt,
+      userPrompt,
+      fallbackGenerator: fallback,
+    });
+
+    const base = fallback();
+    return {
+      ...base,
+      ...raw,
+      ingredients: recipe.ingredients, // strictly preserved
+      instructions: recipe.instructions, // strictly preserved
+      whyYoullLoveThis: Array.isArray(raw?.whyYoullLoveThis) && raw.whyYoullLoveThis.length > 0 ? raw.whyYoullLoveThis : base.whyYoullLoveThis,
+      chefTips: Array.isArray(raw?.chefTips) && raw.chefTips.length > 0 ? raw.chefTips : base.chefTips,
+      substitutions: Array.isArray(raw?.substitutions) ? raw.substitutions : base.substitutions,
+      servingPairings: Array.isArray(raw?.servingPairings) && raw.servingPairings.length > 0 ? raw.servingPairings : base.servingPairings,
+      faq: Array.isArray(raw?.faq) && raw.faq.length > 0 ? raw.faq : base.faq,
+      pinterestMetadata: raw?.pinterestMetadata || base.pinterestMetadata,
+    };
+  } catch {
+    return fallback();
+  }
 }

@@ -63,8 +63,8 @@ export class PipelineOrchestrator {
     const recipe = await recipeRepository.getById(recipeId);
     if (!recipe) return null;
 
-    const creatives = await pinterestRepository.listByRecipe(recipeId);
-    const hasPinterest = creatives.some((c) => c.status === 'approved' || c.status === 'review');
+    const creatives = (await pinterestRepository.listByRecipe(recipeId)) || [];
+    const hasPinterest = creatives.some((c) => c && (c.status === 'approved' || c.status === 'review'));
     const hasApprovedHero = Boolean(recipe.heroImage?.url && recipe.heroImage.url.startsWith('http'));
 
     const progress: PipelineProgress = {
