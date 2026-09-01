@@ -76,10 +76,12 @@ export interface RecipeCardData {
   reheatingInstructions?: string;
   makeAheadTips?: string;
   chefTips?: string[];
-  variations?: string[];
+  variations?: Array<string | { name: string; description: string }>;
   substitutions?: Array<{ original: string; substitute: string; note?: string }>;
   servingPairings?: string[];
   whyYoullLoveThis?: string[];
+  scienceWhyItWorks?: string[];
+  equipmentNeeded?: string[];
   secondaryImages?: Array<{
     url: string;
     r2Key?: string;

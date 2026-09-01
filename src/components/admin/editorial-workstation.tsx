@@ -557,6 +557,74 @@ export function EditorialWorkstation({
                 </div>
               </div>
 
+              {/* Section 3.5: The Science (Why This Recipe Works) */}
+              {Array.isArray(content.scienceWhyItWorks) && content.scienceWhyItWorks.length > 0 && (
+                <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-7 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+                    <h3 className="font-serif text-base font-bold text-white flex items-center gap-2">
+                      <Flame className="w-4 h-4 text-brand-400" />
+                      <span>Test Kitchen Science (Why This Recipe Works)</span>
+                    </h3>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {content.scienceWhyItWorks.map((item, i) => (
+                      <textarea
+                        key={i}
+                        rows={2}
+                        value={item}
+                        onChange={(e) => {
+                          const updated = [...(content.scienceWhyItWorks || [])];
+                          updated[i] = e.target.value;
+                          setContent({ ...content, scienceWhyItWorks: updated });
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-200"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Section 3.6: Flavor Variations */}
+              {Array.isArray(content.variations) && content.variations.length > 0 && (
+                <div className="bg-white rounded-3xl border border-editorial-border p-6 sm:p-7 shadow-sm space-y-4">
+                  <h3 className="font-serif text-base font-bold text-editorial-text flex items-center gap-2 border-b border-editorial-border pb-3">
+                    <Layers className="w-4 h-4 text-brand-500" />
+                    <span>Flavor Variations & Customizations</span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {content.variations.map((v: any, i) => {
+                      const name = typeof v === 'string' ? `Variation ${i + 1}` : v.name;
+                      const description = typeof v === 'string' ? v : v.description;
+                      return (
+                        <div key={i} className="p-3 rounded-xl bg-editorial-surface border border-editorial-border space-y-1.5">
+                          <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => {
+                              const updated: any[] = [...(content.variations || [])];
+                              updated[i] = { name: e.target.value, description };
+                              setContent({ ...content, variations: updated });
+                            }}
+                            className="w-full font-bold text-xs bg-white px-2 py-1 rounded border border-editorial-border"
+                          />
+                          <textarea
+                            rows={2}
+                            value={description}
+                            onChange={(e) => {
+                              const updated: any[] = [...(content.variations || [])];
+                              updated[i] = { name, description: e.target.value };
+                              setContent({ ...content, variations: updated });
+                            }}
+                            className="w-full text-xs text-editorial-muted bg-white px-2 py-1 rounded border border-editorial-border"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Section 4: Chef Tips & Substitutions */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {/* Chef Tips */}

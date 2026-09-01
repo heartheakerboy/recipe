@@ -23,7 +23,6 @@ exports.getFileLogger = getFileLogger;
 exports.test__resetFileLogger = test__resetFileLogger;
 `;
       fs.writeFileSync(fileLoggerPath, stub, 'utf8');
-      console.log('✓ Patched Next.js file-logger for Cloudflare Workers');
     }
 
     const consoleFilePath = path.resolve('node_modules/next/dist/server/node-environment-extensions/console-file.js');
@@ -32,7 +31,6 @@ exports.test__resetFileLogger = test__resetFileLogger;
 Object.defineProperty(exports, "__esModule", { value: true });
 `;
       fs.writeFileSync(consoleFilePath, stub, 'utf8');
-      console.log('✓ Patched Next.js console-file for Cloudflare Workers');
     }
   } catch (err) {
     console.warn('Warning: Could not patch Next.js internals:', err.message);

@@ -165,6 +165,9 @@ export async function saveTransformedDraftAction(
   }
 
   try {
+    const existingRecipe = await recipeRepository.getById(recipeId);
+    const existingCardData = existingRecipe?.recipeCardData || {};
+
     const updated = await recipeRepository.update(recipeId, {
       title: content.title,
       slug: content.slug,
@@ -176,13 +179,17 @@ export async function saveTransformedDraftAction(
       seoTitle: content.seoTitle,
       metaDescription: content.metaDescription,
       recipeCardData: {
+        ...existingCardData,
         storageInstructions: content.storageInstructions,
         reheatingInstructions: content.reheatingInstructions,
         makeAheadTips: content.makeAheadTips,
         chefTips: content.chefTips,
+        variations: content.variations,
         substitutions: content.substitutions,
         servingPairings: content.servingPairings,
         whyYoullLoveThis: content.whyYoullLoveThis,
+        scienceWhyItWorks: content.scienceWhyItWorks,
+        equipmentNeeded: content.equipmentNeeded,
       },
       faq: content.faq,
       status: 'draft', // Preserve draft status; publishing is always a manual admin action

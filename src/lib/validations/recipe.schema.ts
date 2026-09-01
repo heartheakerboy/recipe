@@ -40,7 +40,7 @@ export const RecipeCardDataSchema = z.object({
   reheatingInstructions: z.string().optional(),
   makeAheadTips: z.string().optional(),
   chefTips: z.array(z.string()).optional(),
-  variations: z.array(z.string()).optional(),
+  variations: z.array(z.union([z.string(), z.object({ name: z.string(), description: z.string() })])).optional(),
   substitutions: z.array(
     z.object({
       original: z.string(),
@@ -50,6 +50,8 @@ export const RecipeCardDataSchema = z.object({
   ).optional(),
   servingPairings: z.array(z.string()).optional(),
   whyYoullLoveThis: z.array(z.string()).optional(),
+  scienceWhyItWorks: z.array(z.string()).optional(),
+  equipmentNeeded: z.array(z.string()).optional(),
 });
 
 export const RecipeFormSchema = z.object({

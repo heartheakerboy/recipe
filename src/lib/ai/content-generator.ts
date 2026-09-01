@@ -11,14 +11,17 @@ export interface GeneratedEditorialContent {
   shortDescription: string;
   introduction: string;
   whyYoullLoveThis: string[];
+  scienceWhyItWorks?: string[];
   ingredients: RecipeIngredient[];
   instructions: RecipeInstruction[];
   chefTips: string[];
+  variations?: Array<{ name: string; description: string }>;
   substitutions: Array<{ original: string; substitute: string; note?: string }>;
   servingPairings: string[];
   storageInstructions: string;
   reheatingInstructions: string;
   makeAheadTips?: string;
+  equipmentNeeded?: string[];
   faq: Array<{ question: string; answer: string }>;
   seoTitle: string;
   metaDescription: string;
@@ -39,31 +42,31 @@ export function generateDeterministicEditorialDraft(
   const style = EDITORIAL_STYLE_DEFINITIONS[styleId] || EDITORIAL_STYLE_DEFINITIONS['quick-easy'];
   const cleanTitle = recipe.title.replace(/\b(Best|Ultimate|World's|Amazing|Viral)\b/gi, '').trim();
 
-  // Natural Introduction (2-3 concise paragraphs, style tailored, no cliché openings)
+  // Natural Introduction (3 comprehensive paragraphs with culinary context)
   let introParagraphs: string[] = [];
   if (styleId === 'quick-easy') {
     introParagraphs = [
       `When busy weeknights demand a fast, satisfying dinner without endless cleanup, ${cleanTitle.toLowerCase()} delivers big flavor in just ${facts.totalTimeMinutes} minutes.`,
-      `Made using ${facts.ingredients.length} straightforward ingredients and cooked in a single ${dna.cookingMethod.toLowerCase()}, this recipe keeps hands-on effort to a minimum while ensuring ${dna.textureProfile[0] || 'tender'} results.`,
-      `Serve it alongside your favorite easy sides for a complete weeknight meal that comes together with zero stress.`,
+      `Made using ${facts.ingredients.length} straightforward ingredients and cooked with ${dna.cookingMethod.toLowerCase()}, this recipe keeps hands-on effort to a minimum while ensuring ${dna.textureProfile[0] || 'tender'} results.`,
+      `Whether you are feeding a hungry family or preparing wholesome meals for the week ahead, this dish balances simplicity with restaurant-worthy satisfaction.`,
     ];
   } else if (styleId === 'comfort-food') {
     introParagraphs = [
-      `Nothing warms the kitchen quite like ${cleanTitle.toLowerCase()}, simmered with aromatic garlic and savory herbs until deeply flavorful and satisfying.`,
-      `This cozy recipe combines ${facts.ingredients.slice(0, 3).map((i) => i.item.toLowerCase()).join(', ')} to create a dish that is both comforting and deeply rewarding for relaxed dinners.`,
+      `Nothing warms the kitchen quite like ${cleanTitle.toLowerCase()}, simmered with aromatic garlic, savory seasonings, and rich pan juices until deeply flavorful.`,
+      `This cozy recipe combines ${facts.ingredients.slice(0, 3).map((i) => i.item.toLowerCase()).join(', ')} to create a comforting meal that feels special enough for Sunday dinners yet approachable for any night.`,
       `Pair it with warm crusty bread or fluffy mashed potatoes to soak up every drop of delicious sauce.`,
     ];
   } else if (styleId === 'budget-friendly') {
     introParagraphs = [
       `Built around accessible pantry staples and everyday ingredients, ${cleanTitle.toLowerCase()} proves that delicious home-cooked dinners don't require expensive specialty items.`,
-      `With simple preparation in ${dna.cookingMethod.toLowerCase()}, this reliable recipe makes the most of ${facts.ingredients.slice(0, 3).map((i) => i.item.toLowerCase()).join(', ')}.`,
+      `With simple preparation in ${dna.cookingMethod.toLowerCase()}, this reliable recipe maximizes flavor from ${facts.ingredients.slice(0, 3).map((i) => i.item.toLowerCase()).join(', ')}.`,
       `It's an economical, flavor-first dinner you can return to whenever you want a dependable meal on a budget.`,
     ];
   } else if (styleId === 'beginner-friendly') {
     introParagraphs = [
       `If you're looking for a foolproof recipe with clear milestones, ${cleanTitle.toLowerCase()} is designed for easy, stress-free cooking from start to finish.`,
-      `Every step is broken down into simple visual checkpoints, so you'll know exactly when ingredients are cooked to perfection without guessing.`,
-      `In just ${facts.totalTimeMinutes} minutes, you'll have a wonderful homemade dinner on the table with total confidence.`,
+      `Every step is broken down into simple sensory checkpoints—from listening for that gentle pan sizzle to watching for golden-brown browning—so you cook with complete confidence.`,
+      `In just ${facts.totalTimeMinutes} minutes, you'll have a wonderful homemade dinner on the table without second-guessing a single step.`,
     ];
   } else {
     introParagraphs = [
@@ -72,29 +75,53 @@ export function generateDeterministicEditorialDraft(
     ];
   }
 
-  // Why you'll love it (Factual bullet points only)
+  // Why you'll love it
   const whyYoullLoveThis = [
-    `Ready in about ${facts.totalTimeMinutes} minutes from start to finish`,
-    `Cooked in a single ${dna.cookingMethod.toLowerCase()} for easy cleanup`,
-    `Made with ${facts.ingredients.length} everyday, accessible ingredients`,
-    `Delivers balanced ${dna.flavorProfile.join(' and ')} flavors in every portion`,
+    `Lightning Fast: Table-ready in just ${facts.totalTimeMinutes} minutes from start to finish`,
+    `Minimal Cleanup: Efficient ${dna.cookingMethod.toLowerCase()} workflow leaves fewer dishes in the sink`,
+    `Accessible Ingredients: Made with ${facts.ingredients.length} approachable items found in any grocery store`,
+    `Balanced Flavor Profile: Delivers harmony between ${dna.flavorProfile.join(', ')} notes with wonderful ${dna.textureProfile[0] || 'tender'} texture`,
   ];
 
-  // Chef tips
+  // The Culinary Science: Why This Recipe Works
+  const scienceWhyItWorks = [
+    `High-Heat Searing: Starting in a hot cooking surface triggers the Maillard reaction, developing a golden crust that locks in natural moisture and savory fond.`,
+    `Aromatics Layering: Sautéing aromatics in fat releases fat-soluble flavor compounds that distribute seasoning evenly across every bite.`,
+    `Carryover Resting: Letting the dish rest for a couple minutes before slicing allows internal juices to redistribute evenly rather than spilling onto the board.`,
+  ];
+
+  // Actionable Chef Pro Tips
   const chefTips = [
-    `Pat protein completely dry with paper towels before cooking to achieve an even golden sear.`,
-    `Allow the dish to rest for 2–3 minutes after removing from heat so juices redistribute evenly.`,
-    `Garnish with fresh chopped herbs right before serving for a pop of color and fresh aroma.`,
+    `Pat protein completely dry with paper towels before cooking to achieve an even golden sear instead of steaming.`,
+    `Avoid overcrowding the pan—cook in batches if needed so moisture can evaporate freely and develop deep caramelization.`,
+    `Deglaze with a splash of broth or wine to scrape up the delicious browned bits (fond) stuck to the bottom of the skillet.`,
+    `Finish with fresh chopped herbs or a squeeze of fresh lemon right before serving for a vibrant pop of acidity and color.`,
+  ];
+
+  // Flavor Variations & Customizations
+  const variations = [
+    {
+      name: 'Spicy Kick',
+      description: 'Add 1/2 teaspoon of crushed red pepper flakes or a dash of cayenne pepper when cooking aromatics for subtle, warming heat.',
+    },
+    {
+      name: 'Herb Garden Twist',
+      description: 'Stir in fresh chopped rosemary, thyme, or basil during the final two minutes of cooking for aromatic herbal richness.',
+    },
+    {
+      name: 'Low-Carb & Keto Friendly',
+      description: 'Serve over riced cauliflower or zucchini noodles with an extra drizzle of good olive oil.',
+    },
   ];
 
   // Safe substitutions
   const substitutions: Array<{ original: string; substitute: string; note?: string }> = [];
-  const dairyIng = facts.ingredients.find((i) => i.rawText.toLowerCase().includes('heavy cream') || i.rawText.toLowerCase().includes('milk'));
+  const dairyIng = facts.ingredients.find((i) => i.rawText.toLowerCase().includes('heavy cream') || i.rawText.toLowerCase().includes('milk') || i.rawText.toLowerCase().includes('butter'));
   if (dairyIng) {
     substitutions.push({
       original: dairyIng.item,
-      substitute: 'Full-fat canned coconut milk or unflavored oat milk',
-      note: 'Provides a similar creamy body for dairy-free diets.',
+      substitute: 'Full-fat canned coconut milk or vegan butter',
+      note: 'Maintains rich, velvety body while keeping the dish completely dairy-free.',
     });
   }
 
@@ -107,32 +134,53 @@ export function generateDeterministicEditorialDraft(
     });
   }
 
+  const brothIng = facts.ingredients.find((i) => i.rawText.toLowerCase().includes('chicken broth') || i.rawText.toLowerCase().includes('beef broth'));
+  if (brothIng) {
+    substitutions.push({
+      original: brothIng.item,
+      substitute: 'Vegetable broth or warm water with a pinch of bouillon',
+      note: 'Works seamlessly without altering cooking liquid ratios.',
+    });
+  }
+
   // Serving pairings
   const servingPairings = [
-    'Fluffy steamed jasmine rice or buttered egg noodles',
-    'Crisp green salad with a light lemon vinaigrette',
-    'Roasted seasonal vegetables or steamed broccoli',
-    'Warm garlic bread for dipping',
+    'Fluffy steamed jasmine rice or buttered egg noodles to catch all the juices',
+    'Crisp green salad with a bright lemon-shallot vinaigrette to cut through richness',
+    'Roasted garlic green beans, asparagus, or steamed broccoli',
+    'Warm crusty sourdough or garlic bread for dipping',
+  ];
+
+  // Equipment Needed
+  const equipmentNeeded = [
+    'Large heavy-bottomed skillet or cast iron pan',
+    'Sharp chef knife and cutting board',
+    'Instant-read meat thermometer (for precise doneness)',
+    'Tongs or heatproof spatula',
   ];
 
   // Storage & reheating
-  const storageInstructions = `Store leftover ${cleanTitle.toLowerCase()} in an airtight container in the refrigerator for up to 3–4 days.`;
-  const reheatingInstructions = `Reheat gently in a skillet over medium-low heat with a splash of broth or water to keep it moist and tender, or microwave in 45-second bursts until steaming hot.`;
-  const makeAheadTips = `You can measure and prep all ingredients up to 24 hours in advance and store refrigerated in separate containers for fast weeknight assembly.`;
+  const storageInstructions = `Store leftover ${cleanTitle.toLowerCase()} in an airtight glass container in the refrigerator for up to 4 days. Let cool completely before sealing. For freezing, store in a freezer-safe container for up to 3 months.`;
+  const reheatingInstructions = `For the juiciest texture, reheat gently in a covered skillet over medium-low heat with a splash of broth or water for 3–5 minutes. Alternatively, microwave in 45-second intervals at 80% power until steaming hot throughout.`;
+  const makeAheadTips = `You can chop all aromatics, measure seasonings, and prep ingredients up to 24 hours in advance. Store in airtight containers in the fridge for a 10-minute dinner assembly.`;
 
   // FAQs
   const faq = [
     {
-      question: `How long will this ${cleanTitle.toLowerCase()} keep in the fridge?`,
-      answer: `Stored in a sealed container, leftovers will remain fresh and flavorful for up to 3 to 4 days in the refrigerator.`,
+      question: `How do I store and reheat leftovers?`,
+      answer: `Keep leftovers in an airtight container refrigerated for up to 4 days. Reheat gently in a skillet with 1–2 tablespoons of water or broth over medium-low heat to maintain moisture.`,
     },
     {
-      question: `Can I double this recipe for a crowd?`,
-      answer: `Yes! You can double all ingredient amounts. If doubling, use a larger pan or cook in batches to avoid crowding the cooking vessel.`,
+      question: `Can I make this recipe ahead of time?`,
+      answer: `Yes! You can prep and chop all ingredients up to 24 hours in advance. The cooked dish also keeps well for meal prep lunches throughout the week.`,
     },
     {
-      question: `What are the best side dishes to serve with this?`,
-      answer: `This pairs wonderfully with steamed rice, buttery egg noodles, roasted green vegetables, or a crisp side salad.`,
+      question: `Can I double this recipe for meal prep or a crowd?`,
+      answer: `Absolutely. Double all ingredient quantities, but make sure to use a larger pan or sear in two separate batches to prevent pan crowding and ensure proper browning.`,
+    },
+    {
+      question: `What are the best side dishes to serve alongside?`,
+      answer: `Steamed jasmine rice, roasted potatoes, egg noodles, garlic bread, or a crisp Caesar salad pair exceptionally well with the flavors in this dish.`,
     },
   ];
 
@@ -146,14 +194,17 @@ export function generateDeterministicEditorialDraft(
     shortDescription: metaDescription,
     introduction: introParagraphs.join('\n\n'),
     whyYoullLoveThis,
+    scienceWhyItWorks,
     ingredients: recipe.ingredients, // strictly preserved
     instructions: recipe.instructions, // strictly preserved
     chefTips,
+    variations,
     substitutions,
     servingPairings,
     storageInstructions,
     reheatingInstructions,
     makeAheadTips,
+    equipmentNeeded,
     faq,
     seoTitle,
     metaDescription,
@@ -182,30 +233,61 @@ export async function generateEditorialContent(
   const style = EDITORIAL_STYLE_DEFINITIONS[styleId] || EDITORIAL_STYLE_DEFINITIONS['quick-easy'];
   const fallback = () => generateDeterministicEditorialDraft(recipe, dna, facts, styleId);
 
-  const systemPrompt = `You are a world-class food editor at FlavorNest.xyz.
-Your task is to write an original, high-quality recipe article using the "${style.name}" editorial voice.
+  const systemPrompt = `You are the Lead Culinary Director & Senior Food Editor at FlavorNest.xyz.
+Your mission is to transform basic recipe drafts into deeply engaging, authoritative, culinary-school-grade recipe guides that rank #1 on Google and deliver immense value to home cooks.
 
-RULES:
-1. Preserve ALL ingredient facts, quantities, and cooking instructions exactly. Never hallucinate or alter cooking times or ingredients.
-2. Tone: ${style.toneVoice}
-3. Focus: ${style.focus.join(', ')}
-4. Introduction: 2 to 3 natural paragraphs. Answer what it is, why it's great, when to make it. NEVER start with "This delicious recipe...".
-5. Why You'll Love It: 3 to 5 concise, factual bullets.
-6. Tips: 3 to 4 useful culinary technique and timing tips.
-7. Substitutions: 1 to 3 logically valid pantry swaps. If none exist, return an empty array.
-8. Output MUST be valid JSON.`;
+EDITORIAL STANDARDS & RULES:
+1. FACT LOCK: Preserve ALL ingredient facts, measurements, cooking times, and base steps with 100% fidelity. Never hallucinate different times or quantities.
+2. EDITORIAL VOICE: Write in the "${style.name}" style (${style.toneVoice}). Tone is warm, knowledgeable, encouraging, and precise.
+3. NO CLICHÉ AI FLUFF: Never use lazy phrases like "In this fast-paced world", "Look no further", "Tantalize your tastebuds", or "This culinary delight". Write like a seasoned test kitchen editor (Serious Eats / Bon Appétit / America's Test Kitchen).
+4. THE SCIENCE OF WHY IT WORKS: Include 3 to 4 scientific explanations of cooking techniques (e.g. Maillard browning, emulsion stability, resting meat, acid balance).
+5. SENSORY CHEF TIPS: Provide 4 actionable, practical tips focusing on sensory cues (sound of sizzle, smell of aromatics, visual browning checkpoints).
+6. VARIATIONS & SUBS: Provide 3 creative, tested variations (e.g. Spicy, Herb, Low-Carb) and 2 to 3 smart pantry substitutions with ratio advice.
+7. COMPREHENSIVE FAQS: Provide 4 to 6 real search-intent questions answered clearly with actionable solutions.
+8. OUTPUT FORMAT: Return strictly valid JSON conforming to the requested schema.`;
 
-  const userPrompt = `Generate FlavorNest editorial content for:
-Title: ${recipe.title}
-DNA: ${JSON.stringify(dna)}
-Facts:
-- Total Time: ${facts.totalTimeMinutes} mins (Prep: ${facts.prepTimeMinutes}m, Cook: ${facts.cookTimeMinutes}m)
+  const userPrompt = `Elevate this recipe with high-value editorial depth:
+Recipe: ${recipe.title}
+Cuisine / Style: ${dna.cuisine || 'American'} / ${style.name}
+Method: ${dna.cookingMethod}
+Facts Lock:
+- Total Time: ${facts.totalTimeMinutes}m (Prep: ${facts.prepTimeMinutes}m, Cook: ${facts.cookTimeMinutes}m)
 - Servings: ${facts.servings}
 - Ingredients: ${(facts.ingredients || []).map((i) => i.rawText || i.item).join('; ')}
-- Steps: ${(facts.instructions || []).map((i) => `${i.stepNumber}. ${i.text}`).join(' ')}
+- Instructions: ${(facts.instructions || []).map((i) => `${i.stepNumber}. ${i.text}`).join(' ')}
 
-Required JSON fields:
-title, slug, shortDescription, introduction, whyYoullLoveThis, chefTips, substitutions, servingPairings, storageInstructions, reheatingInstructions, makeAheadTips, faq, seoTitle, metaDescription, pinterestMetadata.`;
+Required JSON Schema:
+{
+  "title": "Clear, compelling recipe title",
+  "slug": "url-slug",
+  "shortDescription": "Compelling 1-2 sentence search snippet (150-160 chars)",
+  "introduction": "3-4 rich paragraphs with culinary background, sensory appeal, and weeknight utility",
+  "whyYoullLoveThis": ["3-5 clear value propositions"],
+  "scienceWhyItWorks": ["3-4 culinary science reasons why this recipe succeeds"],
+  "chefTips": ["4 actionable professional tips with sensory cues"],
+  "variations": [
+    { "name": "Variation Name", "description": "Exact adjustment instructions" }
+  ],
+  "substitutions": [
+    { "original": "Ingredient", "substitute": "Alternative", "note": "Flavor/texture impact" }
+  ],
+  "servingPairings": ["4 complementary side dishes, carbs, and beverages"],
+  "storageInstructions": "Exact fridge/freezer storage guidelines and shelf-life",
+  "reheatingInstructions": "Detailed skillet vs oven vs microwave reheating methods",
+  "makeAheadTips": "Advance prep advice for busy cooks",
+  "equipmentNeeded": ["Essential pans, knives, and tools"],
+  "faq": [
+    { "question": "Real user question?", "answer": "Clear, helpful expert answer." }
+  ],
+  "seoTitle": "High CTR SEO Title | FlavorNest",
+  "metaDescription": "Search meta description with keywords",
+  "pinterestMetadata": {
+    "pinTitle": "Catchy Pin Title",
+    "pinDescription": "Pinterest-optimized pin copy",
+    "suggestedHeadline": "BOLD PIN OVERLAY TEXT",
+    "keywords": ["tag1", "tag2", "tag3"]
+  }
+}`;
 
   try {
     const raw = await provider.generateStructuredContent<Partial<GeneratedEditorialContent>>({
@@ -221,13 +303,17 @@ title, slug, shortDescription, introduction, whyYoullLoveThis, chefTips, substit
       ingredients: recipe.ingredients, // strictly preserved
       instructions: recipe.instructions, // strictly preserved
       whyYoullLoveThis: Array.isArray(raw?.whyYoullLoveThis) && raw.whyYoullLoveThis.length > 0 ? raw.whyYoullLoveThis : base.whyYoullLoveThis,
+      scienceWhyItWorks: Array.isArray(raw?.scienceWhyItWorks) && raw.scienceWhyItWorks.length > 0 ? raw.scienceWhyItWorks : base.scienceWhyItWorks,
       chefTips: Array.isArray(raw?.chefTips) && raw.chefTips.length > 0 ? raw.chefTips : base.chefTips,
+      variations: Array.isArray(raw?.variations) && raw.variations.length > 0 ? raw.variations : base.variations,
       substitutions: Array.isArray(raw?.substitutions) ? raw.substitutions : base.substitutions,
       servingPairings: Array.isArray(raw?.servingPairings) && raw.servingPairings.length > 0 ? raw.servingPairings : base.servingPairings,
+      equipmentNeeded: Array.isArray(raw?.equipmentNeeded) && raw.equipmentNeeded.length > 0 ? raw.equipmentNeeded : base.equipmentNeeded,
       faq: Array.isArray(raw?.faq) && raw.faq.length > 0 ? raw.faq : base.faq,
       pinterestMetadata: raw?.pinterestMetadata || base.pinterestMetadata,
     };
-  } catch {
+  } catch (err) {
+    console.warn('AI editorial generation failed, using rich deterministic fallback:', err);
     return fallback();
   }
 }

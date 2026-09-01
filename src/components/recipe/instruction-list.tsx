@@ -37,6 +37,17 @@ export function InstructionList({ instructions }: InstructionListProps) {
                 {step.instructionText}
               </p>
 
+              {step.imageUrl && (
+                <div className="mt-3 overflow-hidden rounded-xl border border-editorial-border max-w-md shadow-sm">
+                  <img
+                    src={step.imageUrl}
+                    alt={step.imageAlt || `Step ${step.stepNumber} preparation`}
+                    loading="lazy"
+                    className="w-full h-48 sm:h-56 object-cover hover:scale-105 transition-transform duration-300"
+                  />
+                </div>
+              )}
+
               {step.tip && (
                 <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200/80 flex items-start gap-2 text-xs text-amber-900">
                   <Lightbulb className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
