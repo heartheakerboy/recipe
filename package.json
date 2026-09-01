@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "build:worker": "opennextjs-cloudflare build",
+    "deploy": "npm run build:worker && wrangler deploy",
+    "preview": "npm run build:worker && opennextjs-cloudflare preview",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/run-tests.mjs"
   },
