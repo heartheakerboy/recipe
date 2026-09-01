@@ -2,6 +2,8 @@
  * Image Generation Provider Abstraction for FlavorNest.xyz
  */
 
+import { getSecretKey } from '../ai/ai-provider';
+
 export type AspectRatio = '1:1' | '4:3' | '3:2' | '16:9' | '2:3' | '9:16';
 
 export interface ImageGenerationRequest {
@@ -44,107 +46,68 @@ export interface ImageGenerationProvider {
 }
 
 /**
- * Real FLUX.1 API Provider (BFL / Replicate / Fal / OpenAI-compatible endpoint)
+ * Universal FLUX.1 API Provider
+ * Supports:
+ * 1. Black Forest Labs official API (api.bfl.ml) with automated result polling
+ * 2. Together.ai (api.together.xyz)
+ * 3. Fal.ai (fal.run)
+ * 4. OpenAI / DeepInfra / SiliconFlow image generation endpoints
  */
 export class FluxImageProvider implements ImageGenerationProvider {
   name = 'flux-api';
-  private apiKey?: string;
+  private apiKey: string;
   private baseUrl: string;
   private model: string;
   private timeoutMs: number;
 
   constructor(
     apiKey?: string,
-    baseUrl = process.env.FLUX_API_BASE_URL || 'https://api.bfl.ml/v1',
-    model = process.env.FLUX_MODEL || 'flux-pro-1.1',
-    timeoutMs = 45000
+    baseUrl?: string,
+    model?: string,
+    timeoutMs = 60000
   ) {
-    this.apiKey = apiKey || process.env.FLUX_API_KEY;
-    this.baseUrl = baseUrl;
-    this.model = model;
+    this.apiKey = apiKey || getSecretKey('FLUX_API_KEY') || '';
+    this.baseUrl = baseUrl || getSecretKey('FLUX_API_BASE_URL') || process.env.FLUX_API_BASE_URL || 'https://api.bfl.ml/v1';
+    this.model = model || getSecretKey('FLUX_MODEL') || process.env.FLUX_MODEL || 'flux-pro-1.1';
     this.timeoutMs = timeoutMs;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
     const startTime = Date.now();
     if (!this.apiKey) {
-      throw new Error('FLUX API Key is not configured in environment variables.');
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    try {
-      const response = await fetch(`${this.baseUrl}/flux-pro-1.1`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Key': this.apiKey,
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          prompt: request.prompt,
-          width: request.width,
-          height: request.height,
-          prompt_upsampling: true,
-          seed: request.seed,
-          safety_tolerance: 2,
-          output_format: 'jpeg',
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        return {
-          success: false,
-          jobId: `flux_err_${Date.now()}`,
-          status: 'failed',
-          width: request.width,
-          height: request.height,
-          format: 'jpeg',
-          provider: this.name,
-          model: this.model,
-          durationMs: Date.now() - startTime,
-          error: `FLUX API Error (${response.status}): ${errorText}`,
-        };
-      }
-
-      const data = await response.json();
-      const jobId = data.id || `flux_${Date.now()}`;
-
-      // If immediate result returned
-      if (data.result?.sample || data.image_url) {
-        return {
-          success: true,
-          jobId,
-          status: 'completed',
-          imageUrl: data.result?.sample || data.image_url,
-          width: request.width,
-          height: request.height,
-          format: 'jpeg',
-          provider: this.name,
-          model: this.model,
-          durationMs: Date.now() - startTime,
-        };
-      }
-
-      // Asynchronous generation queued
       return {
-        success: true,
-        jobId,
-        status: 'generating',
+        success: false,
+        jobId: `flux_err_${Date.now()}`,
+        status: 'failed',
         width: request.width,
         height: request.height,
         format: 'jpeg',
         provider: this.name,
         model: this.model,
-        durationMs: Date.now() - startTime,
+        durationMs: 0,
+        error: 'FLUX_API_KEY is not configured in Cloudflare secrets / environment variables.',
       };
+    }
+
+    try {
+      // 1. Check if provider is Together AI
+      if (this.baseUrl.includes('together.xyz') || this.baseUrl.includes('/images/generations')) {
+        return await this.generateTogetherOrOpenAI(request, startTime);
+      }
+
+      // 2. Check if provider is Fal AI
+      if (this.baseUrl.includes('fal.run') || this.baseUrl.includes('fal.ai')) {
+        return await this.generateFalAi(request, startTime);
+      }
+
+      // 3. Default: Black Forest Labs (BFL) API with Polling
+      return await this.generateBlackForestLabs(request, startTime);
     } catch (error: any) {
-      clearTimeout(timeoutId);
+      console.error('FLUX Generation Exception:', error);
       return {
         success: false,
         jobId: `flux_err_${Date.now()}`,
@@ -158,6 +121,295 @@ export class FluxImageProvider implements ImageGenerationProvider {
         error: error.message || 'FLUX generation request failed',
       };
     }
+  }
+
+  /**
+   * Black Forest Labs (BFL) Official API
+   */
+  private async generateBlackForestLabs(request: ImageGenerationRequest, startTime: number): Promise<ImageGenerationResponse> {
+    const endpoint = this.model.includes('schnell')
+      ? `${this.baseUrl}/flux-schnell`
+      : this.model.includes('dev')
+      ? `${this.baseUrl}/flux-dev`
+      : `${this.baseUrl}/flux-pro-1.1`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+    const initRes = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Key': this.apiKey,
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        prompt: request.prompt,
+        width: Math.min(1440, Math.max(256, request.width - (request.width % 32))),
+        height: Math.min(1440, Math.max(256, request.height - (request.height % 32))),
+        prompt_upsampling: true,
+        seed: request.seed,
+        safety_tolerance: 2,
+        output_format: 'jpeg',
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!initRes.ok) {
+      const errorText = await initRes.text();
+      return {
+        success: false,
+        jobId: `flux_err_${Date.now()}`,
+        status: 'failed',
+        width: request.width,
+        height: request.height,
+        format: 'jpeg',
+        provider: this.name,
+        model: this.model,
+        durationMs: Date.now() - startTime,
+        error: `BFL FLUX API Error (${initRes.status}): ${errorText}`,
+      };
+    }
+
+    const initData: any = await initRes.json();
+    const jobId = initData.id || initData.task_id;
+
+    if (!jobId) {
+      if (initData.result?.sample || initData.image_url) {
+        return {
+          success: true,
+          jobId: `flux_${Date.now()}`,
+          status: 'completed',
+          imageUrl: initData.result?.sample || initData.image_url,
+          width: request.width,
+          height: request.height,
+          format: 'jpeg',
+          provider: this.name,
+          model: this.model,
+          durationMs: Date.now() - startTime,
+        };
+      }
+      return {
+        success: false,
+        jobId: `flux_err_${Date.now()}`,
+        status: 'failed',
+        width: request.width,
+        height: request.height,
+        format: 'jpeg',
+        provider: this.name,
+        model: this.model,
+        durationMs: Date.now() - startTime,
+        error: 'No task ID returned by FLUX API.',
+      };
+    }
+
+    // Polling Loop for BFL API until image is Ready (max 45 seconds)
+    const pollDeadline = Date.now() + 45000;
+    while (Date.now() < pollDeadline) {
+      await this.sleep(2000);
+
+      try {
+        const pollRes = await fetch(`${this.baseUrl}/get_result?id=${jobId}`, {
+          method: 'GET',
+          headers: {
+            'X-Key': this.apiKey,
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+        });
+
+        if (pollRes.ok) {
+          const pollData: any = await pollRes.json();
+          if (pollData.status === 'Ready' && pollData.result?.sample) {
+            return {
+              success: true,
+              jobId,
+              status: 'completed',
+              imageUrl: pollData.result.sample,
+              width: request.width,
+              height: request.height,
+              format: 'jpeg',
+              provider: this.name,
+              model: this.model,
+              durationMs: Date.now() - startTime,
+            };
+          }
+
+          if (pollData.status === 'Failed' || pollData.status === 'Error') {
+            return {
+              success: false,
+              jobId,
+              status: 'failed',
+              width: request.width,
+              height: request.height,
+              format: 'jpeg',
+              provider: this.name,
+              model: this.model,
+              durationMs: Date.now() - startTime,
+              error: pollData.error || 'FLUX generation failed on BFL server.',
+            };
+          }
+        }
+      } catch (pollErr: any) {
+        console.warn('FLUX polling attempt failed:', pollErr.message);
+      }
+    }
+
+    return {
+      success: false,
+      jobId,
+      status: 'failed',
+      width: request.width,
+      height: request.height,
+      format: 'jpeg',
+      provider: this.name,
+      model: this.model,
+      durationMs: Date.now() - startTime,
+      error: 'FLUX image generation timed out while waiting for BFL server to render.',
+    };
+  }
+
+  /**
+   * Together.ai or OpenAI-Compatible Image API
+   */
+  private async generateTogetherOrOpenAI(request: ImageGenerationRequest, startTime: number): Promise<ImageGenerationResponse> {
+    const endpoint = this.baseUrl.endsWith('/images/generations')
+      ? this.baseUrl
+      : `${this.baseUrl}/images/generations`;
+
+    const modelName = this.model || 'black-forest-labs/FLUX.1-schnell';
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: modelName,
+        prompt: request.prompt,
+        width: request.width,
+        height: request.height,
+        steps: 4,
+        n: 1,
+        response_format: 'url',
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return {
+        success: false,
+        jobId: `flux_err_${Date.now()}`,
+        status: 'failed',
+        width: request.width,
+        height: request.height,
+        format: 'jpeg',
+        provider: this.name,
+        model: this.model,
+        durationMs: Date.now() - startTime,
+        error: `Together/OpenAI FLUX Error (${res.status}): ${errText}`,
+      };
+    }
+
+    const data: any = await res.json();
+    const imageUrl = data.data?.[0]?.url;
+
+    if (!imageUrl) {
+      return {
+        success: false,
+        jobId: `flux_err_${Date.now()}`,
+        status: 'failed',
+        width: request.width,
+        height: request.height,
+        format: 'jpeg',
+        provider: this.name,
+        model: this.model,
+        durationMs: Date.now() - startTime,
+        error: 'No image URL returned in response data.',
+      };
+    }
+
+    return {
+      success: true,
+      jobId: `flux_${Date.now()}`,
+      status: 'completed',
+      imageUrl,
+      width: request.width,
+      height: request.height,
+      format: 'jpeg',
+      provider: this.name,
+      model: this.model,
+      durationMs: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Fal.ai Image API
+   */
+  private async generateFalAi(request: ImageGenerationRequest, startTime: number): Promise<ImageGenerationResponse> {
+    const res = await fetch(this.baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Key ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        prompt: request.prompt,
+        image_size: {
+          width: request.width,
+          height: request.height,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return {
+        success: false,
+        jobId: `flux_err_${Date.now()}`,
+        status: 'failed',
+        width: request.width,
+        height: request.height,
+        format: 'jpeg',
+        provider: this.name,
+        model: this.model,
+        durationMs: Date.now() - startTime,
+        error: `Fal.ai FLUX Error (${res.status}): ${errText}`,
+      };
+    }
+
+    const data: any = await res.json();
+    const imageUrl = data.images?.[0]?.url || data.image?.url;
+
+    if (!imageUrl) {
+      return {
+        success: false,
+        jobId: `flux_err_${Date.now()}`,
+        status: 'failed',
+        width: request.width,
+        height: request.height,
+        format: 'jpeg',
+        provider: this.name,
+        model: this.model,
+        durationMs: Date.now() - startTime,
+        error: 'No image URL found in Fal.ai response.',
+      };
+    }
+
+    return {
+      success: true,
+      jobId: `flux_${Date.now()}`,
+      status: 'completed',
+      imageUrl,
+      width: request.width,
+      height: request.height,
+      format: 'jpeg',
+      provider: this.name,
+      model: this.model,
+      durationMs: Date.now() - startTime,
+    };
   }
 
   async getGenerationStatus(jobId: string): Promise<ImageGenerationStatus> {
@@ -266,11 +518,9 @@ export class MockImageProvider implements ImageGenerationProvider {
   }
 }
 
-import { getSecretKey } from '../ai/ai-provider';
-
 export function getImageProvider(): ImageGenerationProvider {
   const fluxKey = getSecretKey('FLUX_API_KEY');
-  if (fluxKey) {
+  if (fluxKey && fluxKey.trim() !== '') {
     return new FluxImageProvider(fluxKey);
   }
   return new MockImageProvider();

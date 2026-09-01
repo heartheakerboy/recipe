@@ -103,16 +103,12 @@ export async function startImageGenerationAction(
         success: true,
         historyRecord: updated,
       };
-    } else if (genResponse.status === 'generating') {
-      return {
-        success: true,
-        historyRecord,
-      };
     } else {
-      imageHistoryService.failRecord(historyRecord.id, genResponse.error || 'Generation failed');
+      const errMsg = genResponse.error || 'FLUX provider did not return an image URL';
+      imageHistoryService.failRecord(historyRecord.id, errMsg);
       return {
         success: false,
-        error: genResponse.error || 'Image generation failed',
+        error: errMsg,
       };
     }
   } catch (err: any) {
