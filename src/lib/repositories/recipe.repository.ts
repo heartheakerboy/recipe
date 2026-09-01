@@ -1,18 +1,63 @@
-import { Recipe, RecipeStatus } from '../types/recipe';
+import { Recipe } from '../types/recipe';
 import { RecipeFormValues } from '../validations/recipe.schema';
 import { SEED_RECIPES } from '../db/seed-data';
 
-export interface RecipeStats {
-  total: number;
-  published: number;
-  draft: number;
-  review: number;
-  archived: number;
-}
-
-// In-memory / module-scoped repository store for development (persistent across dev hot-reloads)
 declare global {
   var __FLAVORNEST_RECIPES__: Recipe[] | undefined;
+}
+
+function getD1Database(): any | null {
+  try {
+    const { getCloudflareContext } = require('@opennextjs/cloudflare');
+    const ctx = getCloudflareContext();
+    if (ctx?.env?.DB) return ctx.env.DB;
+  } catch {}
+  if (typeof (globalThis as any)?.DB !== 'undefined') {
+    return (globalThis as any).DB;
+  }
+  return null;
+}
+
+function mapD1RowToRecipe(row: any): Recipe {
+  return {
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    shortDescription: row.short_description,
+    introduction: row.introduction,
+    ingredients: typeof row.ingredients_json === 'string' ? JSON.parse(row.ingredients_json) : (row.ingredients_json || []),
+    instructions: typeof row.instructions_json === 'string' ? JSON.parse(row.instructions_json) : (row.instructions_json || []),
+    prepTimeMinutes: row.prep_time_minutes,
+    cookTimeMinutes: row.cook_time_minutes,
+    totalTimeMinutes: row.total_time_minutes,
+    servings: row.servings,
+    servingsUnit: row.servings_unit || 'servings',
+    difficulty: row.difficulty,
+    cuisine: row.cuisine || 'American',
+    mealType: row.meal_type,
+    cookingMethod: row.cooking_method,
+    primaryCategorySlug: row.primary_category_slug,
+    categorySlugs: typeof row.category_slugs_json === 'string' ? JSON.parse(row.category_slugs_json) : (row.category_slugs_json || []),
+    tags: typeof row.tags_json === 'string' ? JSON.parse(row.tags_json) : (row.tags_json || []),
+    heroImage: {
+      url: row.hero_image_url,
+      r2Key: row.hero_image_r2_key,
+      altText: row.hero_image_alt,
+      width: row.hero_image_width || 1200,
+      height: row.hero_image_height || 800,
+    },
+    recipeCardData: typeof row.recipe_card_data_json === 'string' ? JSON.parse(row.recipe_card_data_json) : row.recipe_card_data_json,
+    nutrition: typeof row.nutrition_json === 'string' ? JSON.parse(row.nutrition_json) : row.nutrition_json,
+    faq: typeof row.faq_json === 'string' ? JSON.parse(row.faq_json) : row.faq_json,
+    editorialStyle: row.editorial_style,
+    seoTitle: row.seo_title,
+    metaDescription: row.meta_description,
+    canonicalUrl: row.canonical_url,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    publishedAt: row.published_at,
+  };
 }
 
 export class RecipeRepository {
@@ -31,6 +76,50 @@ export class RecipeRepository {
     limit?: number;
     offset?: number;
   }): Promise<{ recipes: Recipe[]; totalCount: number }> {
+    const db = getD1Database();
+    if (db) {
+      try {
+        let query = 'SELECT * FROM recipes WHERE 1=1';
+        const params: any[] = [];
+
+        if (options?.status && options.status !== 'all') {
+          query += ' AND status = ?';
+          params.push(options.status);
+        }
+
+        if (options?.categorySlug && options.categorySlug !== 'all') {
+          query += ' AND (primary_category_slug = ? OR category_slugs_json LIKE ?)';
+          params.push(options.categorySlug, `%"${options.categorySlug}"%`);
+        }
+
+        if (options?.search && options.search.trim()) {
+          query += ' AND (title LIKE ? OR slug LIKE ? OR short_description LIKE ?)';
+          const searchPattern = `%${options.search.trim()}%`;
+          params.push(searchPattern, searchPattern, searchPattern);
+        }
+
+        query += ' ORDER BY updated_at DESC';
+
+        const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as count');
+        const countRes = await db.prepare(countQuery).bind(...params).first();
+        const totalCount = (countRes as any)?.count || 0;
+
+        const limit = options?.limit || 50;
+        const offset = options?.offset || 0;
+        query += ` LIMIT ${limit} OFFSET ${offset}`;
+
+        const { results } = await db.prepare(query).bind(...params).all();
+        if (results && results.length > 0) {
+          return {
+            recipes: results.map(mapD1RowToRecipe),
+            totalCount,
+          };
+        }
+      } catch (e) {
+        console.warn('D1 list query warning, falling back to memory:', e);
+      }
+    }
+
     const store = await this.getStore();
     let filtered = [...store];
 
@@ -71,31 +160,41 @@ export class RecipeRepository {
   }
 
   async listPublished(limit = 50, offset = 0): Promise<Recipe[]> {
-    const store = await this.getStore();
-    return store
-      .filter((r) => r.status === 'published')
-      .slice(offset, offset + limit);
+    const { recipes } = await this.list({ status: 'published', limit, offset });
+    return recipes;
   }
 
   async getById(id: string): Promise<Recipe | null> {
+    const db = getD1Database();
+    if (db) {
+      try {
+        const row = await db.prepare('SELECT * FROM recipes WHERE id = ?').bind(id).first();
+        if (row) return mapD1RowToRecipe(row);
+      } catch (e) {
+        console.warn('D1 getById query error:', e);
+      }
+    }
+
     const store = await this.getStore();
     return store.find((r) => r.id === id) || null;
   }
 
   async getBySlug(slug: string): Promise<Recipe | null> {
+    const db = getD1Database();
+    if (db) {
+      try {
+        const row = await db.prepare('SELECT * FROM recipes WHERE slug = ?').bind(slug).first();
+        if (row) return mapD1RowToRecipe(row);
+      } catch (e) {
+        console.warn('D1 getBySlug query error:', e);
+      }
+    }
+
     const store = await this.getStore();
     return store.find((r) => r.slug === slug) || null;
   }
 
   async create(data: RecipeFormValues): Promise<Recipe> {
-    const store = await this.getStore();
-
-    // Check slug uniqueness
-    const existing = store.find((r) => r.slug === data.slug);
-    if (existing) {
-      throw new Error(`A recipe with slug "${data.slug}" already exists.`);
-    }
-
     const now = new Date().toISOString();
     const newRecipe: Recipe = {
       id: `rec_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -137,31 +236,72 @@ export class RecipeRepository {
       publishedAt: data.status === 'published' ? now : undefined,
     };
 
+    const db = getD1Database();
+    if (db) {
+      try {
+        await db.prepare(`INSERT OR REPLACE INTO recipes (
+          id, title, slug, short_description, introduction, ingredients_json, instructions_json,
+          prep_time_minutes, cook_time_minutes, total_time_minutes, servings, servings_unit,
+          difficulty, cuisine, meal_type, cooking_method, primary_category_slug, category_slugs_json,
+          tags_json, hero_image_url, hero_image_r2_key, hero_image_alt, hero_image_width, hero_image_height,
+          recipe_card_data_json, nutrition_json, faq_json, editorial_style, seo_title, meta_description,
+          canonical_url, status, created_at, updated_at, published_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+          newRecipe.id,
+          newRecipe.title,
+          newRecipe.slug,
+          newRecipe.shortDescription,
+          newRecipe.introduction,
+          JSON.stringify(newRecipe.ingredients),
+          JSON.stringify(newRecipe.instructions),
+          newRecipe.prepTimeMinutes,
+          newRecipe.cookTimeMinutes,
+          newRecipe.totalTimeMinutes,
+          newRecipe.servings,
+          newRecipe.servingsUnit,
+          newRecipe.difficulty,
+          newRecipe.cuisine,
+          newRecipe.mealType,
+          newRecipe.cookingMethod,
+          newRecipe.primaryCategorySlug,
+          JSON.stringify(newRecipe.categorySlugs),
+          JSON.stringify(newRecipe.tags),
+          newRecipe.heroImage.url,
+          newRecipe.heroImage.r2Key,
+          newRecipe.heroImage.altText,
+          newRecipe.heroImage.width,
+          newRecipe.heroImage.height,
+          newRecipe.recipeCardData ? JSON.stringify(newRecipe.recipeCardData) : null,
+          newRecipe.nutrition ? JSON.stringify(newRecipe.nutrition) : null,
+          newRecipe.faq ? JSON.stringify(newRecipe.faq) : null,
+          newRecipe.editorialStyle,
+          newRecipe.seoTitle,
+          newRecipe.metaDescription,
+          newRecipe.canonicalUrl,
+          newRecipe.status,
+          newRecipe.createdAt,
+          newRecipe.updatedAt,
+          newRecipe.publishedAt || null
+        ).run();
+      } catch (err) {
+        console.warn('D1 create error:', err);
+      }
+    }
+
+    const store = await this.getStore();
     store.unshift(newRecipe);
     return newRecipe;
   }
 
   async update(id: string, data: Partial<RecipeFormValues>): Promise<Recipe> {
-    const store = await this.getStore();
-    let index = store.findIndex((r) => r.id === id);
-    if (index === -1) {
+    const existing = await this.getById(id);
+    if (!existing) {
       if (data.title && data.slug) {
-        // Recover/upsert recipe seamlessly across worker isolate recycles
         const newRecipe = await this.create(data as RecipeFormValues);
         newRecipe.id = id;
         return newRecipe;
       }
       throw new Error(`Recipe with ID "${id}" not found.`);
-    }
-
-    const existing = store[index];
-
-    // If slug is changing, verify uniqueness
-    if (data.slug && data.slug !== existing.slug) {
-      const slugConflict = store.find((r) => r.slug === data.slug && r.id !== id);
-      if (slugConflict) {
-        throw new Error(`A recipe with slug "${data.slug}" already exists.`);
-      }
     }
 
     const now = new Date().toISOString();
@@ -189,10 +329,10 @@ export class RecipeRepository {
       tags: data.tags ?? existing.tags,
       heroImage: {
         url: data.heroImageUrl ?? existing.heroImage.url,
-        r2Key: `recipes/${data.slug ?? existing.slug}/hero.webp`,
+        r2Key: data.slug ? `recipes/${data.slug}/hero.webp` : existing.heroImage.r2Key,
         altText: data.heroImageAlt ?? existing.heroImage.altText,
-        width: 1200,
-        height: 800,
+        width: existing.heroImage.width,
+        height: existing.heroImage.height,
       },
       nutrition: data.nutrition ?? existing.nutrition,
       recipeCardData: data.recipeCardData ?? existing.recipeCardData,
@@ -201,12 +341,71 @@ export class RecipeRepository {
       seoTitle: data.seoTitle ?? existing.seoTitle,
       metaDescription: data.metaDescription ?? existing.metaDescription,
       canonicalUrl: data.canonicalUrl ?? existing.canonicalUrl,
-      status: (data.status as RecipeStatus) ?? existing.status,
+      status: data.status ?? existing.status,
       updatedAt: now,
       publishedAt: isPublishing ? now : existing.publishedAt,
     };
 
-    store[index] = updatedRecipe;
+    const db = getD1Database();
+    if (db) {
+      try {
+        await db.prepare(`UPDATE recipes SET
+          title = ?, slug = ?, short_description = ?, introduction = ?,
+          ingredients_json = ?, instructions_json = ?, prep_time_minutes = ?,
+          cook_time_minutes = ?, total_time_minutes = ?, servings = ?, servings_unit = ?,
+          difficulty = ?, cuisine = ?, meal_type = ?, cooking_method = ?,
+          primary_category_slug = ?, category_slugs_json = ?, tags_json = ?,
+          hero_image_url = ?, hero_image_r2_key = ?, hero_image_alt = ?,
+          recipe_card_data_json = ?, nutrition_json = ?, faq_json = ?,
+          editorial_style = ?, seo_title = ?, meta_description = ?, canonical_url = ?,
+          status = ?, updated_at = ?, published_at = ?
+          WHERE id = ?`).bind(
+          updatedRecipe.title,
+          updatedRecipe.slug,
+          updatedRecipe.shortDescription,
+          updatedRecipe.introduction,
+          JSON.stringify(updatedRecipe.ingredients),
+          JSON.stringify(updatedRecipe.instructions),
+          updatedRecipe.prepTimeMinutes,
+          updatedRecipe.cookTimeMinutes,
+          updatedRecipe.totalTimeMinutes,
+          updatedRecipe.servings,
+          updatedRecipe.servingsUnit,
+          updatedRecipe.difficulty,
+          updatedRecipe.cuisine,
+          updatedRecipe.mealType,
+          updatedRecipe.cookingMethod,
+          updatedRecipe.primaryCategorySlug,
+          JSON.stringify(updatedRecipe.categorySlugs),
+          JSON.stringify(updatedRecipe.tags),
+          updatedRecipe.heroImage.url,
+          updatedRecipe.heroImage.r2Key,
+          updatedRecipe.heroImage.altText,
+          updatedRecipe.recipeCardData ? JSON.stringify(updatedRecipe.recipeCardData) : null,
+          updatedRecipe.nutrition ? JSON.stringify(updatedRecipe.nutrition) : null,
+          updatedRecipe.faq ? JSON.stringify(updatedRecipe.faq) : null,
+          updatedRecipe.editorialStyle,
+          updatedRecipe.seoTitle,
+          updatedRecipe.metaDescription,
+          updatedRecipe.canonicalUrl,
+          updatedRecipe.status,
+          updatedRecipe.updatedAt,
+          updatedRecipe.publishedAt || null,
+          id
+        ).run();
+      } catch (err) {
+        console.warn('D1 update error:', err);
+      }
+    }
+
+    const store = await this.getStore();
+    const idx = store.findIndex((r) => r.id === id);
+    if (idx !== -1) {
+      store[idx] = updatedRecipe;
+    } else {
+      store.unshift(updatedRecipe);
+    }
+
     return updatedRecipe;
   }
 
@@ -215,23 +414,42 @@ export class RecipeRepository {
   }
 
   async delete(id: string): Promise<boolean> {
+    const db = getD1Database();
+    if (db) {
+      try {
+        await db.prepare('DELETE FROM recipes WHERE id = ?').bind(id).run();
+      } catch (err) {
+        console.warn('D1 delete error:', err);
+      }
+    }
+
     const store = await this.getStore();
     const index = store.findIndex((r) => r.id === id);
-    if (index === -1) return false;
-    store.splice(index, 1);
-    return true;
+    if (index !== -1) {
+      store.splice(index, 1);
+      return true;
+    }
+    return false;
   }
 
   async getStats(): Promise<RecipeStats> {
-    const store = await this.getStore();
+    const { recipes, totalCount } = await this.list({ limit: 1000 });
     return {
-      total: store.length,
-      published: store.filter((r) => r.status === 'published').length,
-      draft: store.filter((r) => r.status === 'draft').length,
-      review: store.filter((r) => r.status === 'review' || r.status === 'processing' || r.status === 'approved').length,
-      archived: store.filter((r) => r.status === 'archived').length,
+      total: totalCount,
+      published: recipes.filter((r) => r.status === 'published').length,
+      draft: recipes.filter((r) => r.status === 'draft').length,
+      review: recipes.filter((r) => r.status === 'review' || r.status === 'processing' || r.status === 'approved').length,
+      archived: recipes.filter((r) => r.status === 'archived').length,
     };
   }
+}
+
+export interface RecipeStats {
+  total: number;
+  published: number;
+  draft: number;
+  review: number;
+  archived: number;
 }
 
 export const recipeRepository = new RecipeRepository();
