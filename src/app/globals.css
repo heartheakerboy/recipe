@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-serif: 'Playfair Display', Georgia, Cambria, 'Times New Roman', Times, serif;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-editorial-surface text-editorial-text font-sans selection:bg-brand-100 selection:text-brand-900;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif text-editorial-text tracking-tight;
+  }
+}
+
+/* Custom scrollbar for horizontal category scrollers */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

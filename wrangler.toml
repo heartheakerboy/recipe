@@ -1,0 +1,18 @@
+name = "flavour-newst"
+main = ".open-next/worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "flavornest-db"
+database_id = "5005fb3e-5667-4c59-81fd-87e0caace72f"
+migrations_dir = "src/lib/db/migrations"
+
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "flavornest-media"
