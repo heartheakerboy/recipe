@@ -51,6 +51,11 @@ export default function AdminRecipeImportPage() {
         }
       }
     } catch (err: any) {
+      if (err.message?.includes('was not found on the server') || err.message?.includes('failed-to-find-server-action')) {
+        setErrorMsg('New app update detected! Synchronizing server actions...');
+        setTimeout(() => window.location.reload(), 800);
+        return;
+      }
       setErrorMsg(err.message || 'An unexpected error occurred during extraction.');
     } finally {
       setAnalyzing(false);
@@ -89,6 +94,11 @@ export default function AdminRecipeImportPage() {
         setSavingDraft(false);
       }
     } catch (err: any) {
+      if (err.message?.includes('was not found on the server') || err.message?.includes('failed-to-find-server-action')) {
+        setErrorMsg('New app update detected! Synchronizing server actions and reloading...');
+        setTimeout(() => window.location.reload(), 800);
+        return;
+      }
       setErrorMsg(err.message || 'Error saving recipe draft.');
       setSavingDraft(false);
     }
