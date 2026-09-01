@@ -1,23 +1,18 @@
 'use server';
 
-import { verifyAdminSession } from '../auth/session';
 import { publishingService, PublicationChecklistResult } from '../publishing/publishing.service';
 import { publishingAuditService, PublishingAuditRecord } from '../publishing/audit-log.service';
-import { revalidatePath } from 'next/cache';
-
-async function checkAuth() {
-  const isAuthed = await verifyAdminSession();
-  if (!isAuthed) {
-    throw new Error('Unauthorized: Admin session required.');
-  }
-}
+import { verifyActionAuth, safeRevalidatePath } from './action-utils';
 
 export async function getPublicationChecklistAction(recipeId: string): Promise<{
   success: boolean;
   checklist?: PublicationChecklistResult;
   error?: string;
 }> {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: false, error: auth.error || 'Unauthorized' };
+  }
 
   try {
     const checklist = await publishingService.getPublicationChecklist(recipeId);
@@ -38,13 +33,16 @@ export async function publishRecipeAction(recipeId: string): Promise<{
   publishedUrl?: string;
   error?: string;
 }> {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: false, error: auth.error || 'Unauthorized' };
+  }
 
   try {
     const result = await publishingService.publishRecipe(recipeId);
-    revalidatePath(`/admin/recipes/${recipeId}`);
-    revalidatePath('/admin/recipes');
-    revalidatePath('/admin');
+    safeRevalidatePath(`/admin/recipes/${recipeId}`);
+    safeRevalidatePath('/admin/recipes');
+    safeRevalidatePath('/admin');
     return {
       success: true,
       publishedUrl: result.publishedUrl,
@@ -61,13 +59,16 @@ export async function unpublishRecipeAction(recipeId: string): Promise<{
   success: boolean;
   error?: string;
 }> {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: false, error: auth.error || 'Unauthorized' };
+  }
 
   try {
     await publishingService.unpublishRecipe(recipeId);
-    revalidatePath(`/admin/recipes/${recipeId}`);
-    revalidatePath('/admin/recipes');
-    revalidatePath('/admin');
+    safeRevalidatePath(`/admin/recipes/${recipeId}`);
+    safeRevalidatePath('/admin/recipes');
+    safeRevalidatePath('/admin');
     return { success: true };
   } catch (err: any) {
     return {
@@ -81,7 +82,10 @@ export async function getPublishingAuditLogsAction(recipeId: string): Promise<{
   success: boolean;
   logs: PublishingAuditRecord[];
 }> {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: true, logs: [] };
+  }
   const logs = publishingAuditService.listByRecipe(recipeId);
   return { success: true, logs };
 }

@@ -2,18 +2,24 @@
 
 import { recipeImportService, NormalizedImportedRecipe } from '../importer/recipe-import.service';
 import { recipeRepository } from '../repositories/recipe.repository';
-import { verifyAdminSession } from '../auth/session';
-import { revalidatePath } from 'next/cache';
-
-async function checkAuth() {
-  const isAuthed = await verifyAdminSession();
-  if (!isAuthed) {
-    throw new Error('Unauthorized: Admin session required.');
-  }
-}
+import { verifyActionAuth, safeRevalidatePath } from './action-utils';
 
 export async function analyzeRecipeUrlAction(url: string) {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return {
+      success: false,
+      originalUrl: url,
+      normalizedUrl: url,
+      domain: '',
+      duplicate: { isDuplicate: false },
+      confidences: {},
+      warnings: [],
+      errors: [auth.error || 'Unauthorized: Admin session required.'],
+      durationMs: 0,
+    };
+  }
+
   if (!url || typeof url !== 'string') {
     return {
       success: false,
@@ -32,7 +38,10 @@ export async function analyzeRecipeUrlAction(url: string) {
 }
 
 export async function saveImportedDraftAction(data: NormalizedImportedRecipe) {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: false, error: auth.error || 'Unauthorized' };
+  }
 
   try {
     const created = await recipeRepository.create({
@@ -48,8 +57,8 @@ export async function saveImportedDraftAction(data: NormalizedImportedRecipe) {
       cookingMethod: data.cookingMethod as any,
     });
 
-    revalidatePath('/admin/recipes');
-    revalidatePath('/admin');
+    safeRevalidatePath('/admin/recipes');
+    safeRevalidatePath('/admin');
 
     return { success: true, recipeId: created.id, slug: created.slug };
   } catch (error) {

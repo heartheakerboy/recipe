@@ -143,8 +143,14 @@ export class RecipeRepository {
 
   async update(id: string, data: Partial<RecipeFormValues>): Promise<Recipe> {
     const store = await this.getStore();
-    const index = store.findIndex((r) => r.id === id);
+    let index = store.findIndex((r) => r.id === id);
     if (index === -1) {
+      if (data.title && data.slug) {
+        // Recover/upsert recipe seamlessly across worker isolate recycles
+        const newRecipe = await this.create(data as RecipeFormValues);
+        newRecipe.id = id;
+        return newRecipe;
+      }
       throw new Error(`Recipe with ID "${id}" not found.`);
     }
 

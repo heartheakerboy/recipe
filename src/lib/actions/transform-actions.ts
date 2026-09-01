@@ -1,6 +1,5 @@
 'use server';
 
-import { verifyAdminSession } from '../auth/session';
 import { recipeRepository } from '../repositories/recipe.repository';
 import { analyzeRecipeDNA, extractRuleBasedRecipeDNA, RecipeDNA } from '../ai/recipe-dna';
 import { createRecipeFactsLock, RecipeFactsLock } from '../ai/recipe-facts';
@@ -8,14 +7,7 @@ import { selectEditorialStyle, EditorialStyleId, StyleRecommendation } from '../
 import { generateEditorialContent, generateDeterministicEditorialDraft, GeneratedEditorialContent } from '../ai/content-generator';
 import { validateEditorialQuality, QualityValidationReport } from '../ai/quality-validator';
 import { aiJobService } from '../ai/ai-jobs.service';
-import { revalidatePath } from 'next/cache';
-
-async function checkAuth() {
-  const isAuthed = await verifyAdminSession();
-  if (!isAuthed) {
-    throw new Error('Unauthorized: Admin session required.');
-  }
-}
+import { verifyActionAuth, safeRevalidatePath } from './action-utils';
 
 export async function analyzeRecipeDnaAction(recipeId: string): Promise<{
   success: boolean;
@@ -24,7 +16,11 @@ export async function analyzeRecipeDnaAction(recipeId: string): Promise<{
   styleRecommendation?: StyleRecommendation;
   error?: string;
 }> {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: false, error: auth.error || 'Unauthorized' };
+  }
+
   const startTime = Date.now();
 
   try {
@@ -71,7 +67,11 @@ export async function generateEditorialDraftAction(
   qualityReport?: QualityValidationReport;
   error?: string;
 }> {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: false, error: auth.error || 'Unauthorized' };
+  }
+
   const startTime = Date.now();
 
   try {
@@ -125,7 +125,10 @@ export async function regenerateSectionAction(
   sectionData?: any;
   error?: string;
 }> {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: false, error: auth.error || 'Unauthorized' };
+  }
 
   try {
     const recipe = await recipeRepository.getById(recipeId);
@@ -156,7 +159,10 @@ export async function saveTransformedDraftAction(
   recipeId?: string;
   error?: string;
 }> {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: false, error: auth.error || 'Unauthorized' };
+  }
 
   try {
     const updated = await recipeRepository.update(recipeId, {
@@ -182,9 +188,9 @@ export async function saveTransformedDraftAction(
       status: 'draft', // Preserve draft status; publishing is always a manual admin action
     });
 
-    revalidatePath(`/admin/recipes/${recipeId}`);
-    revalidatePath(`/admin/recipes/${recipeId}/transform`);
-    revalidatePath('/admin/recipes');
+    safeRevalidatePath(`/admin/recipes/${recipeId}`);
+    safeRevalidatePath(`/admin/recipes/${recipeId}/transform`);
+    safeRevalidatePath('/admin/recipes');
 
     return {
       success: true,

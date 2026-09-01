@@ -1,8 +1,6 @@
 'use server';
 
-import { verifyAdminSession } from '../auth/session';
 import { recipeRepository } from '../repositories/recipe.repository';
-import { imageRepository } from '../repositories/image.repository';
 import { extractRuleBasedRecipeDNA } from '../ai/recipe-dna';
 import {
   generateFoodImagePrompt,
@@ -10,17 +8,10 @@ import {
   VisualStylePreset,
   PromptConfig,
 } from '../images/prompt-generator';
-import { getImageProvider, ImageGenerationRequest } from '../images/image-provider';
+import { getImageProvider } from '../images/image-provider';
 import { imageHistoryService, ImageGenerationHistoryRecord } from '../images/image-history.service';
 import { mediaStorageService } from '../r2/media-storage.service';
-import { revalidatePath } from 'next/cache';
-
-async function checkAuth() {
-  const isAuthed = await verifyAdminSession();
-  if (!isAuthed) {
-    throw new Error('Unauthorized: Admin session required.');
-  }
-}
+import { verifyActionAuth, safeRevalidatePath } from './action-utils';
 
 export async function generatePromptAction(
   recipeId: string,
@@ -31,7 +22,10 @@ export async function generatePromptAction(
   promptConfig?: PromptConfig;
   error?: string;
 }> {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: false, error: auth.error || 'Unauthorized' };
+  }
 
   try {
     const recipe = await recipeRepository.getById(recipeId);
@@ -65,7 +59,10 @@ export async function startImageGenerationAction(
   historyRecord?: ImageGenerationHistoryRecord;
   error?: string;
 }> {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: false, error: auth.error || 'Unauthorized' };
+  }
 
   try {
     const recipe = await recipeRepository.getById(recipeId);
@@ -135,7 +132,10 @@ export async function approveImageAction(
   publicUrl?: string;
   error?: string;
 }> {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: false, error: auth.error || 'Unauthorized' };
+  }
 
   try {
     const recipe = await recipeRepository.getById(recipeId);
@@ -174,10 +174,10 @@ export async function approveImageAction(
     // 3. Mark history record approved
     imageHistoryService.updateStatus(historyRecordId, 'approved', stored.r2Key);
 
-    revalidatePath(`/admin/recipes/${recipeId}`);
-    revalidatePath(`/admin/recipes/${recipeId}/images`);
-    revalidatePath(`/recipes/${recipe.slug}`);
-    revalidatePath('/');
+    safeRevalidatePath(`/admin/recipes/${recipeId}`);
+    safeRevalidatePath(`/admin/recipes/${recipeId}/images`);
+    safeRevalidatePath(`/recipes/${recipe.slug}`);
+    safeRevalidatePath('/');
 
     return {
       success: true,
@@ -192,7 +192,10 @@ export async function approveImageAction(
 }
 
 export async function rejectImageAction(historyRecordId: string): Promise<{ success: boolean }> {
-  await checkAuth();
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: false };
+  }
   imageHistoryService.updateStatus(historyRecordId, 'rejected');
   return { success: true };
 }

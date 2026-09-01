@@ -214,8 +214,13 @@ export function RecipeForm({ initialRecipe, categories, tags }: RecipeFormProps)
           router.refresh();
         }
       }
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Server error occurred');
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (msg.includes('Minified React error') || msg.includes('441')) {
+        setErrorMsg('Session expired or edge connection reset. Please refresh the page and verify login to save.');
+      } else {
+        setErrorMsg(err instanceof Error ? err.message : 'Server error occurred');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -251,7 +256,12 @@ export function RecipeForm({ initialRecipe, categories, tags }: RecipeFormProps)
         setErrorMsg(res.error || 'Failed to publish recipe');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Error occurred while publishing');
+      const msg = err?.message || '';
+      if (msg.includes('Minified React error') || msg.includes('441')) {
+        setErrorMsg('Session expired or edge connection reset. Please refresh the page and verify login.');
+      } else {
+        setErrorMsg(err.message || 'Error occurred while publishing');
+      }
     } finally {
       setIsPublishing(false);
     }
@@ -273,7 +283,12 @@ export function RecipeForm({ initialRecipe, categories, tags }: RecipeFormProps)
         setErrorMsg(res.error || 'Failed to unpublish');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Error unpublishing');
+      const msg = err?.message || '';
+      if (msg.includes('Minified React error') || msg.includes('441')) {
+        setErrorMsg('Session expired or edge connection reset. Please refresh the page and verify login.');
+      } else {
+        setErrorMsg(err.message || 'Error unpublishing');
+      }
     } finally {
       setIsPublishing(false);
     }
