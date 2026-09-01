@@ -199,3 +199,33 @@ export async function rejectImageAction(historyRecordId: string): Promise<{ succ
   imageHistoryService.updateStatus(historyRecordId, 'rejected');
   return { success: true };
 }
+
+export async function setHeroImageFromUrlAction(
+  recipeId: string,
+  imageUrl: string,
+  altText?: string
+): Promise<{ success: boolean; error?: string }> {
+  const auth = await verifyActionAuth();
+  if (!auth.authorized) {
+    return { success: false, error: auth.error || 'Unauthorized' };
+  }
+
+  try {
+    const recipe = await recipeRepository.getById(recipeId);
+    if (!recipe) return { success: false, error: 'Recipe not found' };
+
+    await recipeRepository.update(recipeId, {
+      heroImageUrl: imageUrl,
+      heroImageAlt: altText || recipe.heroImage?.altText || recipe.title,
+    });
+
+    safeRevalidatePath(`/admin/recipes/${recipeId}`);
+    safeRevalidatePath(`/admin/recipes/${recipeId}/images`);
+    safeRevalidatePath(`/recipes/${recipe.slug}`);
+    safeRevalidatePath('/');
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to update hero image' };
+  }
+}

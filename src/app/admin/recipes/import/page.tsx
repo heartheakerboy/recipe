@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   UploadCloud,
   ArrowRight,
@@ -16,6 +17,8 @@ import {
   ShieldAlert,
   Clock,
   Sparkles,
+  Image as ImageIcon,
+  Check,
 } from 'lucide-react';
 import { analyzeRecipeUrlAction, saveImportedDraftAction } from '@/lib/actions/import-actions';
 import { RecipeExtractionResult } from '@/lib/importer/recipe-import.service';
@@ -26,6 +29,7 @@ export default function AdminRecipeImportPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [result, setResult] = useState<RecipeExtractionResult | null>(null);
+  const [selectedHeroUrl, setSelectedHeroUrl] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleAnalyze = async (e: React.FormEvent) => {
@@ -42,11 +46,27 @@ export default function AdminRecipeImportPage() {
         setErrorMsg(res.errors[0] || 'Analysis failed. Please check the URL.');
       } else {
         setResult(res);
+        if (res.recipe?.heroImageUrl) {
+          setSelectedHeroUrl(res.recipe.heroImageUrl);
+        }
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'An unexpected error occurred during extraction.');
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  const handleSelectHero = (imageUrl: string) => {
+    setSelectedHeroUrl(imageUrl);
+    if (result?.recipe) {
+      setResult({
+        ...result,
+        recipe: {
+          ...result.recipe,
+          heroImageUrl: imageUrl,
+        },
+      });
     }
   };
 
@@ -56,7 +76,12 @@ export default function AdminRecipeImportPage() {
     setErrorMsg('');
 
     try {
-      const res = await saveImportedDraftAction(result.recipe);
+      const recipeToSave = {
+        ...result.recipe,
+        heroImageUrl: selectedHeroUrl || result.recipe.heroImageUrl,
+      };
+
+      const res = await saveImportedDraftAction(recipeToSave);
       if (res.success && res.recipeId) {
         router.push(`/admin/recipes/${res.recipeId}`);
       } else {
@@ -94,6 +119,8 @@ export default function AdminRecipeImportPage() {
     );
   };
 
+  const allImages = result?.recipe?.sourceMetadata?.extractedImages || [];
+
   return (
     <div className="space-y-8 max-w-4xl mx-auto pb-24">
       {/* Page Header */}
@@ -102,10 +129,10 @@ export default function AdminRecipeImportPage() {
           Recipe Ingestion Pipeline
         </span>
         <h1 className="font-serif text-3xl font-bold text-editorial-text mt-1">
-          Import Recipe from URL
+          Import Recipe & Images from URL
         </h1>
         <p className="text-xs sm:text-sm text-editorial-muted">
-          Extract structured ingredients, timings, and instructions from external recipe pages to prepare a draft.
+          Extract structured ingredients, timings, instructions, and all source photos directly from external recipe pages.
         </p>
       </div>
 
@@ -129,7 +156,7 @@ export default function AdminRecipeImportPage() {
               />
             </div>
             <p className="text-[11px] text-editorial-lightMuted mt-1.5">
-              Supports Schema.org JSON-LD, @graph collections, and semantic HTML recipe layouts.
+              Supports Schema.org JSON-LD, @graph collections, OpenGraph metadata, and high-res step photos.
             </p>
           </div>
 
@@ -142,12 +169,12 @@ export default function AdminRecipeImportPage() {
               {analyzing ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Analyzing Recipe...</span>
+                  <span>Extracting Recipe & Images...</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  <span>Analyze Recipe</span>
+                  <span>Analyze & Extract Recipe</span>
                 </>
               )}
             </button>
@@ -158,6 +185,7 @@ export default function AdminRecipeImportPage() {
                 onClick={() => {
                   setResult(null);
                   setUrl('');
+                  setSelectedHeroUrl('');
                 }}
                 className="px-4 py-3 rounded-xl bg-editorial-surface hover:bg-editorial-surfaceAlt border border-editorial-border text-xs font-semibold text-editorial-muted cursor-pointer"
               >
@@ -199,7 +227,7 @@ export default function AdminRecipeImportPage() {
 
       {/* Extraction Results Breakdown */}
       {result && result.recipe && (
-        <div className="bg-white rounded-3xl border border-editorial-border p-6 sm:p-8 shadow-card space-y-6 animate-in fade-in">
+        <div className="bg-white rounded-3xl border border-editorial-border p-6 sm:p-8 shadow-card space-y-8 animate-in fade-in">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-editorial-border pb-4">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-editorial-lightMuted">
@@ -229,10 +257,81 @@ export default function AdminRecipeImportPage() {
             </div>
           )}
 
+          {/* Extracted Images Gallery */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-serif text-base font-bold text-editorial-text flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-brand-600" />
+                  <span>Imported Source Images</span>
+                </h3>
+                <p className="text-[11px] text-editorial-muted">
+                  Found {allImages.length} image(s) from this page. Click on any photo to set it as the Hero image.
+                </p>
+              </div>
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
+                {allImages.length} Image{allImages.length === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            {allImages.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {allImages.map((img, idx) => {
+                  const isSelectedHero = selectedHeroUrl === img.url;
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => handleSelectHero(img.url)}
+                      className={`relative group rounded-2xl overflow-hidden border-2 cursor-pointer transition-all duration-200 aspect-[4/3] bg-editorial-surface ${
+                        isSelectedHero
+                          ? 'border-brand-500 ring-2 ring-brand-500 shadow-md scale-[1.02]'
+                          : 'border-editorial-border hover:border-editorial-borderStrong hover:shadow-sm'
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.url}
+                        alt={img.alt || `Imported photo ${idx + 1}`}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+
+                      {/* Tag Badge */}
+                      <div className="absolute top-2 left-2 flex gap-1">
+                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-black/70 text-white backdrop-blur-sm">
+                          {img.type}
+                        </span>
+                      </div>
+
+                      {/* Selection Checkmark */}
+                      {isSelectedHero && (
+                        <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center shadow">
+                          <Check className="w-3.5 h-3.5" />
+                        </div>
+                      )}
+
+                      {/* Overlay label */}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 text-white text-[10px]">
+                        <div className="font-bold truncate">{isSelectedHero ? '★ Primary Hero' : img.alt || `Image ${idx + 1}`}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-6 rounded-2xl bg-editorial-surface border border-editorial-border text-center text-xs text-editorial-muted">
+                No high-resolution images found directly in the markup. A default editorial placeholder will be assigned.
+              </div>
+            )}
+          </div>
+
           {/* Field Confidence Grid */}
           <div className="space-y-3 text-xs">
             <h3 className="font-serif text-sm font-bold text-editorial-text">
-              Supported Information Detected:
+              Supported Recipe Information:
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -287,23 +386,13 @@ export default function AdminRecipeImportPage() {
                 </div>
                 {getConfidenceBadge(result.confidences.category?.confidence)}
               </div>
-
-              <div className="sm:col-span-2 p-3.5 rounded-xl bg-editorial-surface/60 border border-editorial-border flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-editorial-text">Image Reference</div>
-                  <div className="text-[11px] text-amber-800">
-                    ⚠ External reference only — Will be replaced by original FLUX image in future editorial pipeline.
-                  </div>
-                </div>
-                {getConfidenceBadge(result.confidences.image?.confidence)}
-              </div>
             </div>
           </div>
 
           {/* Action CTAs */}
           <div className="pt-4 border-t border-editorial-border flex flex-wrap items-center justify-between gap-4">
             <div className="text-[11px] text-editorial-lightMuted">
-              Saving will create a private <strong>draft</strong> record.
+              Saving will create a private <strong>draft</strong> with all extracted images attached.
             </div>
 
             <div className="flex items-center gap-3">
@@ -316,11 +405,11 @@ export default function AdminRecipeImportPage() {
                 {savingDraft ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving Draft...</span>
+                    <span>Saving Draft with Images...</span>
                   </>
                 ) : (
                   <>
-                    <span>Continue to Editor</span>
+                    <span>Save Draft & Continue</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}

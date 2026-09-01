@@ -98,6 +98,17 @@ export const RecipeFormSchema = z.object({
   seoTitle: z.string().optional(),
   metaDescription: z.string().optional(),
   canonicalUrl: z.string().optional(),
+  secondaryImages: z.array(
+    z.object({
+      url: z.string(),
+      r2Key: z.string().optional().default(''),
+      altText: z.string().optional().default(''),
+      width: z.number().optional().default(1200),
+      height: z.number().optional().default(800),
+    })
+  ).optional(),
+  sourceUrl: z.string().optional(),
+  sourceMetadata: z.any().optional(),
   faq: z.array(RecipeFaqSchema).optional(),
   nutrition: RecipeNutritionSchema.optional(),
   recipeCardData: RecipeCardDataSchema.optional(),

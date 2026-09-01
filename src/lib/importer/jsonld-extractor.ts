@@ -2,6 +2,15 @@ import { parseIsoDurationToMinutes } from './time-parser';
 import { normalizeIngredientList } from './ingredient-normalizer';
 import type { RecipeIngredient, RecipeInstruction } from '../types/recipe';
 
+export interface ExtractedImageItem {
+  url: string;
+  alt?: string;
+  width?: number;
+  height?: number;
+  type: 'hero' | 'step' | 'gallery' | 'og' | 'body';
+  stepIndex?: number;
+}
+
 export interface ExtractedJsonLdRecipe {
   title?: string;
   description?: string;
@@ -16,6 +25,7 @@ export interface ExtractedJsonLdRecipe {
   tags?: string[];
   imageUrl?: string;
   imageAlt?: string;
+  allImages: ExtractedImageItem[];
   authorName?: string;
   datePublished?: string;
   nutrition?: {
@@ -66,19 +76,50 @@ function findRecipeInObject(node: any): any | null {
   return null;
 }
 
-export function extractInstructionsFromJsonLd(rawInstructions: any): RecipeInstruction[] {
+function normalizeImageUrl(raw: any): string | undefined {
+  if (!raw) return undefined;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    if (trimmed.startsWith('//')) return `https:${trimmed}`;
+    return undefined;
+  }
+  if (typeof raw === 'object') {
+    return normalizeImageUrl(raw.url || raw.contentUrl || raw['@id'] || raw.src);
+  }
+  return undefined;
+}
+
+export function extractInstructionsFromJsonLd(
+  rawInstructions: any,
+  extractedImagesCollector?: ExtractedImageItem[]
+): RecipeInstruction[] {
   if (!rawInstructions) return [];
 
   const steps: RecipeInstruction[] = [];
 
-  const addStep = (text: string, title?: string, tip?: string) => {
+  const addStep = (text: string, title?: string, tip?: string, rawImg?: any) => {
     const cleanText = text.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim();
     if (cleanText.length > 0) {
+      const stepNumber = steps.length + 1;
+      const stepImageUrl = normalizeImageUrl(rawImg);
+
+      if (stepImageUrl && extractedImagesCollector) {
+        extractedImagesCollector.push({
+          url: stepImageUrl,
+          alt: title || `Step ${stepNumber} instruction`,
+          type: 'step',
+          stepIndex: stepNumber,
+        });
+      }
+
       steps.push({
-        stepNumber: steps.length + 1,
+        stepNumber,
         title: title ? title.replace(/<[^>]*>?/gm, '').trim() : undefined,
         instructionText: cleanText,
         tip,
+        imageUrl: stepImageUrl,
+        imageAlt: title || `Step ${stepNumber}`,
       });
     }
   };
@@ -102,7 +143,7 @@ export function extractInstructionsFromJsonLd(rawInstructions: any): RecipeInstr
 
         // HowToStep
         if (itemType === 'HowToStep' || item.text) {
-          addStep(item.text || item.itemListElement || '', item.name);
+          addStep(item.text || item.itemListElement || '', item.name, undefined, item.image);
         }
         // HowToSection (nested list of steps)
         else if (itemType === 'HowToSection' && Array.isArray(item.itemListElement)) {
@@ -111,7 +152,7 @@ export function extractInstructionsFromJsonLd(rawInstructions: any): RecipeInstr
             if (typeof subItem === 'string') {
               addStep(subItem, sectionTitle);
             } else if (subItem && typeof subItem === 'object') {
-              addStep(subItem.text || '', subItem.name || sectionTitle);
+              addStep(subItem.text || '', subItem.name || sectionTitle, undefined, subItem.image);
             }
           }
         }
@@ -123,15 +164,59 @@ export function extractInstructionsFromJsonLd(rawInstructions: any): RecipeInstr
 }
 
 export function extractImageFromJsonLd(rawImage: any): string | undefined {
-  if (!rawImage) return undefined;
-  if (typeof rawImage === 'string') return rawImage;
-  if (Array.isArray(rawImage) && rawImage.length > 0) {
-    return extractImageFromJsonLd(rawImage[0]);
+  return normalizeImageUrl(rawImage);
+}
+
+export function extractAllImagesFromJsonLd(recipeNode: any, defaultAlt?: string): ExtractedImageItem[] {
+  const images: ExtractedImageItem[] = [];
+  const seenUrls = new Set<string>();
+
+  const addImage = (raw: any, type: 'hero' | 'step' | 'gallery' | 'body', altText?: string, width?: number, height?: number) => {
+    const url = normalizeImageUrl(raw);
+    if (!url || seenUrls.has(url)) return;
+    seenUrls.add(url);
+
+    let alt = altText || defaultAlt;
+    let w = width;
+    let h = height;
+
+    if (typeof raw === 'object') {
+      alt = raw.caption || raw.description || raw.name || alt;
+      if (raw.width) w = parseInt(String(raw.width), 10) || undefined;
+      if (raw.height) h = parseInt(String(raw.height), 10) || undefined;
+    }
+
+    images.push({
+      url,
+      alt,
+      width: w,
+      height: h,
+      type,
+    });
+  };
+
+  // 1. Direct Image Property
+  if (recipeNode.image) {
+    if (Array.isArray(recipeNode.image)) {
+      recipeNode.image.forEach((img: any, idx: number) => {
+        addImage(img, idx === 0 ? 'hero' : 'gallery', defaultAlt);
+      });
+    } else {
+      addImage(recipeNode.image, 'hero', defaultAlt);
+    }
   }
-  if (typeof rawImage === 'object') {
-    return rawImage.url || rawImage.contentUrl || rawImage['@id'];
+
+  // 2. Video Thumbnail
+  if (recipeNode.video) {
+    const vThumb = recipeNode.video.thumbnailUrl || recipeNode.video.thumbnail;
+    if (Array.isArray(vThumb)) {
+      vThumb.forEach((t: any) => addImage(t, 'gallery', `${defaultAlt || 'Recipe'} video thumbnail`));
+    } else if (vThumb) {
+      addImage(vThumb, 'gallery', `${defaultAlt || 'Recipe'} video thumbnail`);
+    }
   }
-  return undefined;
+
+  return images;
 }
 
 export function extractServingsFromJsonLd(rawYield: any): number | undefined {
@@ -159,6 +244,9 @@ export function extractRecipeFromJsonLd(html: string): ExtractedJsonLdRecipe | n
       const recipeNode = findRecipeInObject(parsed);
 
       if (recipeNode) {
+        const recipeTitle = recipeNode.name || recipeNode.headline;
+        const allImages = extractAllImagesFromJsonLd(recipeNode, recipeTitle);
+
         // Extract Ingredients
         const rawIngredients = Array.isArray(recipeNode.recipeIngredient)
           ? recipeNode.recipeIngredient
@@ -167,9 +255,10 @@ export function extractRecipeFromJsonLd(html: string): ExtractedJsonLdRecipe | n
           : [];
         const ingredients = normalizeIngredientList(rawIngredients.map((i: any) => String(i)));
 
-        // Extract Instructions
+        // Extract Instructions and step-specific images
         const instructions = extractInstructionsFromJsonLd(
-          recipeNode.recipeInstructions || recipeNode.instructions
+          recipeNode.recipeInstructions || recipeNode.instructions,
+          allImages
         );
 
         // Extract Times
@@ -183,8 +272,8 @@ export function extractRecipeFromJsonLd(html: string): ExtractedJsonLdRecipe | n
         // Extract Servings
         const servings = extractServingsFromJsonLd(recipeNode.recipeYield || recipeNode.yield);
 
-        // Extract Image
-        const imageUrl = extractImageFromJsonLd(recipeNode.image);
+        // Primary Image
+        const imageUrl = allImages[0]?.url || extractImageFromJsonLd(recipeNode.image);
 
         // Extract Category & Cuisine
         const category = Array.isArray(recipeNode.recipeCategory)
@@ -216,7 +305,7 @@ export function extractRecipeFromJsonLd(html: string): ExtractedJsonLdRecipe | n
         }
 
         return {
-          title: recipeNode.name || recipeNode.headline,
+          title: recipeTitle,
           description: recipeNode.description,
           ingredients,
           instructions,
@@ -228,7 +317,8 @@ export function extractRecipeFromJsonLd(html: string): ExtractedJsonLdRecipe | n
           category: typeof category === 'string' ? category : undefined,
           tags,
           imageUrl,
-          imageAlt: recipeNode.name,
+          imageAlt: recipeTitle,
+          allImages,
           authorName: typeof recipeNode.author === 'string' ? recipeNode.author : recipeNode.author?.name,
           datePublished: recipeNode.datePublished,
           nutrition,

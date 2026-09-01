@@ -80,6 +80,15 @@ export interface RecipeCardData {
   substitutions?: Array<{ original: string; substitute: string; note?: string }>;
   servingPairings?: string[];
   whyYoullLoveThis?: string[];
+  secondaryImages?: Array<{
+    url: string;
+    r2Key?: string;
+    altText?: string;
+    width?: number;
+    height?: number;
+  }>;
+  _sourceUrl?: string;
+  _sourceMetadata?: any;
 }
 
 export interface Recipe {

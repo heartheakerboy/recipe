@@ -37,6 +37,7 @@ import {
   startImageGenerationAction,
   approveImageAction,
   rejectImageAction,
+  setHeroImageFromUrlAction,
 } from '@/lib/actions/image-actions';
 
 interface ImageStudioProps {
@@ -72,6 +73,58 @@ export function ImageStudio({ recipe, recipeDna, initialHistory }: ImageStudioPr
     noArtifacts: true,
     cleanComposition: true,
   });
+
+  const importedSourceImages = React.useMemo(() => {
+    const list: Array<{ url: string; altText?: string; role?: string }> = [];
+    const seen = new Set<string>();
+
+    const add = (url?: string, altText?: string, role = 'Imported Photo') => {
+      if (!url || seen.has(url)) return;
+      seen.add(url);
+      list.push({ url, altText, role });
+    };
+
+    if (recipe.heroImage?.url) {
+      add(recipe.heroImage.url, recipe.heroImage.altText, 'Hero Photo');
+    }
+
+    if (Array.isArray(recipe.secondaryImages)) {
+      recipe.secondaryImages.forEach((img, idx) => {
+        add(img.url, img.altText, `Detail Photo ${idx + 1}`);
+      });
+    }
+
+    const extImages = (recipe.sourceMetadata as any)?.extractedImages;
+    if (Array.isArray(extImages)) {
+      extImages.forEach((img: any, idx: number) => {
+        add(img.url, img.alt, img.type ? `${img.type.toUpperCase()} Photo` : `Source Photo ${idx + 1}`);
+      });
+    }
+
+    if (Array.isArray(recipe.instructions)) {
+      recipe.instructions.forEach((ins) => {
+        if (ins.imageUrl) {
+          add(ins.imageUrl, ins.imageAlt || `Step ${ins.stepNumber}`, `Step ${ins.stepNumber} Photo`);
+        }
+      });
+    }
+
+    return list;
+  }, [recipe]);
+
+  const handleSetHeroFromImported = async (imageUrl: string, altText?: string) => {
+    try {
+      const res = await setHeroImageFromUrlAction(recipe.id, imageUrl, altText);
+      if (res.success) {
+        setStatusMsg({ type: 'success', text: 'Hero image updated successfully from source photos!' });
+        router.refresh();
+      } else {
+        setStatusMsg({ type: 'error', text: res.error || 'Failed to update hero image' });
+      }
+    } catch (err: any) {
+      setStatusMsg({ type: 'error', text: err.message || 'Error updating hero image' });
+    }
+  };
 
   const handleOpenPromptModal = async (type: FoodImageType) => {
     setTargetRole(type);
@@ -554,6 +607,87 @@ export function ImageStudio({ recipe, recipeDna, initialHistory }: ImageStudioPr
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          IMPORTED SOURCE PHOTOS GALLERY
+         ========================================================================= */}
+      {importedSourceImages.length > 0 && (
+        <div className="bg-white rounded-3xl border border-editorial-border p-6 sm:p-7 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-editorial-border pb-3">
+            <div>
+              <h3 className="font-serif text-base font-bold text-editorial-text flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-brand-600" />
+                <span>Imported Source Photos ({importedSourceImages.length})</span>
+              </h3>
+              <p className="text-[11px] text-editorial-muted">
+                Photos extracted directly from the original source recipe URL. Click &ldquo;Set as Hero&rdquo; to use any photo for this recipe.
+              </p>
+            </div>
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-editorial-surface text-editorial-muted border border-editorial-border">
+              {importedSourceImages.length} Available
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {importedSourceImages.map((img, idx) => {
+              const isCurrentHero = recipe.heroImage?.url === img.url;
+              return (
+                <div
+                  key={idx}
+                  className={`group relative rounded-2xl overflow-hidden border-2 bg-editorial-surface aspect-[4/3] flex flex-col justify-between transition-all ${
+                    isCurrentHero
+                      ? 'border-brand-500 ring-2 ring-brand-500 shadow-md'
+                      : 'border-editorial-border hover:border-editorial-borderStrong hover:shadow-sm'
+                  }`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={img.url}
+                    alt={img.altText || `Source photo ${idx + 1}`}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+
+                  {/* Badge */}
+                  <div className="absolute top-2 left-2 flex gap-1">
+                    <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-black/75 text-white backdrop-blur-sm">
+                      {img.role}
+                    </span>
+                  </div>
+
+                  {/* Active Hero Check */}
+                  {isCurrentHero && (
+                    <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-brand-500 text-white text-[10px] font-bold flex items-center gap-1 shadow">
+                      <Check className="w-3 h-3" />
+                      <span>Active Hero</span>
+                    </div>
+                  )}
+
+                  {/* Actions Bar */}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/50 to-transparent p-2.5 flex items-center justify-between opacity-95 group-hover:opacity-100 transition-opacity">
+                    <span className="text-[10px] text-white/90 truncate max-w-[120px]">
+                      {img.altText || `Photo ${idx + 1}`}
+                    </span>
+
+                    {!isCurrentHero && (
+                      <button
+                        type="button"
+                        onClick={() => handleSetHeroFromImported(img.url, img.altText)}
+                        className="px-2.5 py-1 rounded-lg bg-white/90 hover:bg-white text-editorial-text font-bold text-[10px] shadow cursor-pointer transition-all hover:scale-105"
+                      >
+                        Set as Hero
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import { validateRecipeUrl, normalizeRecipeUrl } from './url-validator';
 import { fetchSourceHtml } from './source-fetcher';
-import { extractRecipeFromJsonLd } from './jsonld-extractor';
+import { extractRecipeFromJsonLd, ExtractedImageItem } from './jsonld-extractor';
 import { extractRecipeFromHtmlFallback, extractPageMetadata } from './html-extractor';
 import { recipeRepository } from '../repositories/recipe.repository';
 import { RecipeIngredient, RecipeInstruction } from '../types/recipe';
@@ -34,6 +34,13 @@ export interface NormalizedImportedRecipe {
   tags: string[];
   heroImageUrl: string;
   heroImageAlt: string;
+  secondaryImages: Array<{
+    url: string;
+    r2Key: string;
+    altText: string;
+    width: number;
+    height: number;
+  }>;
   editorialStyle: string;
   sourceUrl: string;
   sourceDomain: string;
@@ -44,6 +51,7 @@ export interface NormalizedImportedRecipe {
     author?: string;
     ogImage?: string;
     nutrition?: any;
+    extractedImages?: ExtractedImageItem[];
   };
 }
 
@@ -139,8 +147,8 @@ export class RecipeImportService {
 
     // 4. Layer 1: JSON-LD Extraction
     const jsonLdRecipe = extractRecipeFromJsonLd(html);
-    const htmlMetadata = extractPageMetadata(html);
-    const htmlFallback = extractRecipeFromHtmlFallback(html);
+    const htmlMetadata = extractPageMetadata(html, normalizedUrl);
+    const htmlFallback = extractRecipeFromHtmlFallback(html, normalizedUrl);
 
     // 5. Normalization & Confidence Assignment
     let title = '';
@@ -203,18 +211,53 @@ export class RecipeImportService {
       ? { confidence: 'high', source: 'jsonld' }
       : { confidence: 'medium', source: 'default' };
 
-    // Image
+    // 6. Multi-Image Collection & Deduplication
+    const allExtractedImages: ExtractedImageItem[] = [];
+    const seenImageUrls = new Set<string>();
+
+    const addExtractedImg = (img?: ExtractedImageItem) => {
+      if (!img?.url || seenImageUrls.has(img.url)) return;
+      seenImageUrls.add(img.url);
+      allExtractedImages.push(img);
+    };
+
+    // Add JSON-LD images first
+    (jsonLdRecipe?.allImages || []).forEach(addExtractedImg);
+    if (jsonLdRecipe?.imageUrl) {
+      addExtractedImg({ url: jsonLdRecipe.imageUrl, alt: title, type: 'hero' });
+    }
+
+    // Add HTML & OpenGraph images
+    (htmlFallback.allImages || []).forEach(addExtractedImg);
+    if (htmlMetadata.ogImage) {
+      addExtractedImg({ url: htmlMetadata.ogImage, alt: title, type: 'og' });
+    }
+    if (htmlMetadata.twitterImage) {
+      addExtractedImg({ url: htmlMetadata.twitterImage, alt: title, type: 'gallery' });
+    }
+
+    // Determine primary hero image
     let heroImageUrl =
-      jsonLdRecipe?.imageUrl ||
-      htmlMetadata.ogImage ||
+      allExtractedImages[0]?.url ||
       'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1200&q=80';
-    confidences.image = jsonLdRecipe?.imageUrl
-      ? { confidence: 'high', source: 'jsonld' }
-      : htmlMetadata.ogImage
-      ? { confidence: 'medium', source: 'metadata' }
+
+    let heroImageAlt = allExtractedImages[0]?.alt || title;
+
+    confidences.image = allExtractedImages.length > 0
+      ? { confidence: 'high', source: jsonLdRecipe?.allImages?.length ? 'jsonld' : 'html' }
       : { confidence: 'low', source: 'default' };
 
-    // Short Description & Introduction (Factual summary placeholder)
+    // Build secondary images list
+    const recipeSlug = slugify(title);
+    const secondaryImages = allExtractedImages.slice(1).map((img, idx) => ({
+      url: img.url,
+      r2Key: `recipes/${recipeSlug}/imported-${idx + 1}.webp`,
+      altText: img.alt || `${title} - step/detail photo ${idx + 2}`,
+      width: img.width || 1200,
+      height: img.height || 800,
+    }));
+
+    // Short Description & Introduction
     const shortDesc =
       jsonLdRecipe?.description ||
       htmlMetadata.ogDescription ||
@@ -247,7 +290,7 @@ export class RecipeImportService {
 
     const normalizedRecipe: NormalizedImportedRecipe = {
       title,
-      slug: slugify(title),
+      slug: recipeSlug,
       shortDescription: shortDesc,
       introduction: intro,
       ingredients,
@@ -264,7 +307,8 @@ export class RecipeImportService {
       categorySlugs: [primaryCategorySlug],
       tags: jsonLdRecipe?.tags || [],
       heroImageUrl,
-      heroImageAlt: title,
+      heroImageAlt,
+      secondaryImages,
       editorialStyle,
       sourceUrl: normalizedUrl,
       sourceDomain: domain,
@@ -275,6 +319,7 @@ export class RecipeImportService {
         author: jsonLdRecipe?.authorName,
         ogImage: htmlMetadata.ogImage,
         nutrition: jsonLdRecipe?.nutrition,
+        extractedImages: allExtractedImages,
       },
     };
 
@@ -287,6 +332,7 @@ export class RecipeImportService {
         success: true,
         ingredientsCount: ingredients.length,
         instructionsCount: instructions.length,
+        imagesCount: allExtractedImages.length,
         warningsCount: warnings.length,
         durationMs: Date.now() - startTime,
       })

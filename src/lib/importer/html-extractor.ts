@@ -1,6 +1,6 @@
 import { normalizeIngredientList } from './ingredient-normalizer';
 import type { RecipeIngredient, RecipeInstruction } from '../types/recipe';
-import { parseIsoDurationToMinutes } from './time-parser';
+import { ExtractedImageItem } from './jsonld-extractor';
 
 export interface ExtractedHtmlMetadata {
   pageTitle?: string;
@@ -8,6 +8,7 @@ export interface ExtractedHtmlMetadata {
   ogTitle?: string;
   ogDescription?: string;
   ogImage?: string;
+  twitterImage?: string;
   canonicalUrl?: string;
 }
 
@@ -21,6 +22,7 @@ export interface ExtractedHtmlRecipe {
   totalTimeMinutes?: number;
   servings?: number;
   imageUrl?: string;
+  allImages: ExtractedImageItem[];
   metadata: ExtractedHtmlMetadata;
 }
 
@@ -38,7 +40,34 @@ function cleanHtmlText(raw: string): string {
     .trim();
 }
 
-export function extractPageMetadata(html: string): ExtractedHtmlMetadata {
+function isDisallowedImage(url: string): boolean {
+  const lower = url.toLowerCase();
+  if (lower.endsWith('.svg') || lower.endsWith('.gif') || lower.endsWith('.ico')) return true;
+  const junkPatterns = [
+    'avatar', 'gravatar', 'logo', 'icon', 'emoji', 'badge', 'pixel', 'spacer',
+    'wp-includes', 'advertisement', 'share-button', '1x1', 'analytics', 'author',
+    'profile', 'header-bg', 'sidebar', 'footer', 'button', 'social'
+  ];
+  return junkPatterns.some((pattern) => lower.includes(pattern));
+}
+
+function resolveUrl(src: string, baseUrl?: string): string | undefined {
+  if (!src) return undefined;
+  const trimmed = src.trim();
+  if (trimmed.startsWith('data:')) return undefined;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  if (trimmed.startsWith('//')) return `https:${trimmed}`;
+  if (baseUrl) {
+    try {
+      return new URL(trimmed, baseUrl).href;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+export function extractPageMetadata(html: string, baseUrl?: string): ExtractedHtmlMetadata {
   const metadata: ExtractedHtmlMetadata = {};
 
   // Page Title
@@ -64,9 +93,14 @@ export function extractPageMetadata(html: string): ExtractedHtmlMetadata {
     metadata.ogDescription = cleanHtmlText(ogDescMatch[1]);
   }
 
-  const ogImgMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([\s\S]*?)["'][^>]*>/i);
+  const ogImgMatch = html.match(/<meta[^>]*property=["']og:image(?::secure_url)?["'][^>]*content=["']([\s\S]*?)["'][^>]*>/i);
   if (ogImgMatch) {
-    metadata.ogImage = ogImgMatch[1].trim();
+    metadata.ogImage = resolveUrl(ogImgMatch[1], baseUrl);
+  }
+
+  const twImgMatch = html.match(/<meta[^>]*(?:name|property)=["']twitter:image(?::src)?["'][^>]*content=["']([\s\S]*?)["'][^>]*>/i);
+  if (twImgMatch) {
+    metadata.twitterImage = resolveUrl(twImgMatch[1], baseUrl);
   }
 
   // Canonical
@@ -78,8 +112,67 @@ export function extractPageMetadata(html: string): ExtractedHtmlMetadata {
   return metadata;
 }
 
-export function extractRecipeFromHtmlFallback(html: string): ExtractedHtmlRecipe {
-  const metadata = extractPageMetadata(html);
+export function extractAllImagesFromHtml(html: string, baseUrl?: string, defaultAlt?: string): ExtractedImageItem[] {
+  const images: ExtractedImageItem[] = [];
+  const seenUrls = new Set<string>();
+
+  const addImage = (rawUrl?: string, type: 'hero' | 'step' | 'gallery' | 'og' | 'body' = 'gallery', altText?: string, width?: number, height?: number) => {
+    if (!rawUrl) return;
+    const resolved = resolveUrl(rawUrl, baseUrl);
+    if (!resolved || seenUrls.has(resolved) || isDisallowedImage(resolved)) return;
+    seenUrls.add(resolved);
+
+    images.push({
+      url: resolved,
+      alt: altText || defaultAlt,
+      width,
+      height,
+      type,
+    });
+  };
+
+  // 1. Metadata Images
+  const meta = extractPageMetadata(html, baseUrl);
+  if (meta.ogImage) addImage(meta.ogImage, 'og', defaultAlt);
+  if (meta.twitterImage) addImage(meta.twitterImage, 'gallery', defaultAlt);
+
+  // 2. Extract Pinterest specific media
+  const pinMediaRegex = /data-pin-media=["']([^"']+)["']/gi;
+  let pinMatch: RegExpExecArray | null;
+  while ((pinMatch = pinMediaRegex.exec(html)) !== null) {
+    addImage(pinMatch[1], 'gallery', defaultAlt);
+  }
+
+  // 3. Extract <img> Tags
+  const imgTagRegex = /<img\b([^>]+)>/gi;
+  let imgMatch: RegExpExecArray | null;
+  while ((imgMatch = imgTagRegex.exec(html)) !== null) {
+    const attributes = imgMatch[1];
+    
+    // Find src or lazy loading source
+    const srcMatch = attributes.match(/\b(?:src|data-src|data-lazy-src|data-original)=["']([^"']+)["']/i);
+    const altMatch = attributes.match(/\balt=["']([^"']*)["']/i);
+    const widthMatch = attributes.match(/\bwidth=["']?(\d+)["']?/i);
+    const heightMatch = attributes.match(/\bheight=["']?(\d+)["']?/i);
+
+    if (srcMatch && srcMatch[1]) {
+      const w = widthMatch ? parseInt(widthMatch[1], 10) : undefined;
+      const h = heightMatch ? parseInt(heightMatch[1], 10) : undefined;
+      const alt = altMatch ? cleanHtmlText(altMatch[1]) : undefined;
+
+      // Skip tiny icon images if width/height specified
+      if ((w && w < 150) || (h && h < 150)) continue;
+
+      const isStepImg = /step|instruction/i.test(attributes);
+      addImage(srcMatch[1], isStepImg ? 'step' : 'body', alt, w, h);
+    }
+  }
+
+  return images;
+}
+
+export function extractRecipeFromHtmlFallback(html: string, baseUrl?: string): ExtractedHtmlRecipe {
+  const metadata = extractPageMetadata(html, baseUrl);
 
   // 1. Title fallback
   let title = metadata.ogTitle;
@@ -92,8 +185,10 @@ export function extractRecipeFromHtmlFallback(html: string): ExtractedHtmlRecipe
     }
   }
 
-  // 2. Ingredients fallback: Look for microdata or standard list items
-  const ingredients: RecipeIngredient[] = [];
+  // 2. All Images
+  const allImages = extractAllImagesFromHtml(html, baseUrl, title);
+
+  // 3. Ingredients fallback: Look for microdata or standard list items
   const rawIngredientLines: string[] = [];
 
   // Look for itemprop="recipeIngredient" or itemprop="ingredients"
@@ -115,7 +210,7 @@ export function extractRecipeFromHtmlFallback(html: string): ExtractedHtmlRecipe
 
   const normalizedIngredients = normalizeIngredientList(rawIngredientLines);
 
-  // 3. Instructions fallback: Look for itemprop="recipeInstructions" or HowToStep
+  // 4. Instructions fallback: Look for itemprop="recipeInstructions" or HowToStep
   const instructions: RecipeInstruction[] = [];
   const rawInstructionLines: string[] = [];
 
@@ -146,7 +241,8 @@ export function extractRecipeFromHtmlFallback(html: string): ExtractedHtmlRecipe
     description: metadata.ogDescription || metadata.metaDescription,
     ingredients: normalizedIngredients,
     instructions,
-    imageUrl: metadata.ogImage,
+    imageUrl: metadata.ogImage || allImages[0]?.url,
+    allImages,
     metadata,
   };
 }

@@ -19,6 +19,10 @@ function getD1Database(): any | null {
 }
 
 function mapD1RowToRecipe(row: any): Recipe {
+  const cardData = typeof row.recipe_card_data_json === 'string' ? JSON.parse(row.recipe_card_data_json) : (row.recipe_card_data_json || {});
+  const sourceMeta = cardData?._sourceMetadata || (row.source_metadata_json ? (typeof row.source_metadata_json === 'string' ? JSON.parse(row.source_metadata_json) : row.source_metadata_json) : undefined);
+  const secondaryImages = cardData?.secondaryImages || (row.secondary_images_json ? (typeof row.secondary_images_json === 'string' ? JSON.parse(row.secondary_images_json) : row.secondary_images_json) : []);
+
   return {
     id: row.id,
     title: row.title,
@@ -46,7 +50,10 @@ function mapD1RowToRecipe(row: any): Recipe {
       width: row.hero_image_width || 1200,
       height: row.hero_image_height || 800,
     },
-    recipeCardData: typeof row.recipe_card_data_json === 'string' ? JSON.parse(row.recipe_card_data_json) : row.recipe_card_data_json,
+    secondaryImages,
+    sourceUrl: row.source_url || cardData?._sourceUrl,
+    sourceMetadata: sourceMeta,
+    recipeCardData: cardData,
     nutrition: typeof row.nutrition_json === 'string' ? JSON.parse(row.nutrition_json) : row.nutrition_json,
     faq: typeof row.faq_json === 'string' ? JSON.parse(row.faq_json) : row.faq_json,
     editorialStyle: row.editorial_style,
@@ -223,8 +230,16 @@ export class RecipeRepository {
         width: 1200,
         height: 800,
       },
+      secondaryImages: data.secondaryImages || [],
+      sourceUrl: data.sourceUrl,
+      sourceMetadata: data.sourceMetadata,
       nutrition: data.nutrition,
-      recipeCardData: data.recipeCardData,
+      recipeCardData: {
+        ...(data.recipeCardData || {}),
+        secondaryImages: data.secondaryImages || [],
+        _sourceUrl: data.sourceUrl,
+        _sourceMetadata: data.sourceMetadata,
+      },
       faq: data.faq,
       editorialStyle: data.editorialStyle,
       seoTitle: data.seoTitle || `${data.title} | FlavorNest`,
@@ -334,8 +349,16 @@ export class RecipeRepository {
         width: existing.heroImage.width,
         height: existing.heroImage.height,
       },
+      secondaryImages: data.secondaryImages ?? existing.secondaryImages ?? [],
+      sourceUrl: data.sourceUrl ?? existing.sourceUrl,
+      sourceMetadata: data.sourceMetadata ?? existing.sourceMetadata,
       nutrition: data.nutrition ?? existing.nutrition,
-      recipeCardData: data.recipeCardData ?? existing.recipeCardData,
+      recipeCardData: {
+        ...(data.recipeCardData ?? existing.recipeCardData ?? {}),
+        secondaryImages: data.secondaryImages ?? existing.secondaryImages ?? [],
+        _sourceUrl: data.sourceUrl ?? existing.sourceUrl,
+        _sourceMetadata: data.sourceMetadata ?? existing.sourceMetadata,
+      },
       faq: data.faq ?? existing.faq,
       editorialStyle: data.editorialStyle ?? existing.editorialStyle,
       seoTitle: data.seoTitle ?? existing.seoTitle,
