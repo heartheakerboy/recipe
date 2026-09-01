@@ -266,9 +266,12 @@ export class MockImageProvider implements ImageGenerationProvider {
   }
 }
 
+import { getSecretKey } from '../ai/ai-provider';
+
 export function getImageProvider(): ImageGenerationProvider {
-  if (process.env.FLUX_API_KEY) {
-    return new FluxImageProvider();
+  const fluxKey = getSecretKey('FLUX_API_KEY');
+  if (fluxKey) {
+    return new FluxImageProvider(fluxKey);
   }
   return new MockImageProvider();
 }

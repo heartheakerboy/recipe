@@ -1,6 +1,7 @@
 import { Recipe } from '../types/recipe';
 import { RecipeFormValues } from '../validations/recipe.schema';
 import { SEED_RECIPES } from '../db/seed-data';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 declare global {
   var __FLAVORNEST_RECIPES__: Recipe[] | undefined;
@@ -8,9 +9,8 @@ declare global {
 
 function getD1Database(): any | null {
   try {
-    const { getCloudflareContext } = require('@opennextjs/cloudflare');
     const ctx = getCloudflareContext();
-    if (ctx?.env?.DB) return ctx.env.DB;
+    if ((ctx?.env as any)?.DB) return (ctx.env as any).DB;
   } catch {}
   if (typeof (globalThis as any)?.DB !== 'undefined') {
     return (globalThis as any).DB;

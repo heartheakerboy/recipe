@@ -2,6 +2,8 @@
  * AI Provider Abstraction for FlavorNest.xyz Editorial Pipeline
  */
 
+import { getCloudflareContext } from '@opennextjs/cloudflare';
+
 export interface GenerateTextOptions {
   systemPrompt?: string;
   userPrompt: string;
@@ -30,14 +32,14 @@ export class OpenAICompatibleProvider implements AIProvider {
   private model: string;
 
   constructor(apiKey?: string, endpoint = 'https://api.openai.com/v1', model = 'gpt-4o-mini') {
-    this.apiKey = apiKey || process.env.OPENAI_API_KEY;
+    this.apiKey = apiKey || getSecretKey('OPENAI_API_KEY');
     this.endpoint = endpoint;
     this.model = model;
   }
 
   async generateText(options: GenerateTextOptions): Promise<string> {
     if (!this.apiKey) {
-      throw new Error('API key is not configured for OpenAI provider.');
+      throw new Error('API key is not configured for AI provider.');
     }
 
     const messages = [];
@@ -62,7 +64,7 @@ export class OpenAICompatibleProvider implements AIProvider {
 
     if (!response.ok) {
       const err = await response.text();
-      throw new Error(`OpenAI API error (${response.status}): ${err}`);
+      throw new Error(`AI API error (${response.status}): ${err}`);
     }
 
     const data = await response.json();
@@ -76,16 +78,17 @@ export class OpenAICompatibleProvider implements AIProvider {
 
     const system = `${options.systemPrompt || ''}\n\nIMPORTANT: You must respond ONLY with valid JSON matching the requested structure. Do NOT include markdown code blocks or surrounding commentary.`;
 
-    const raw = await this.generateText({
-      systemPrompt: system,
-      userPrompt: options.userPrompt,
-      temperature: options.temperature ?? 0.4,
-    });
-
     try {
+      const raw = await this.generateText({
+        systemPrompt: system,
+        userPrompt: options.userPrompt,
+        temperature: options.temperature ?? 0.4,
+      });
+
       const cleanJson = raw.replace(/^```json\s*/i, '').replace(/\s*```$/, '').trim();
       return JSON.parse(cleanJson) as T;
-    } catch {
+    } catch (err) {
+      console.warn('AI structured generation error, using fallback:', err);
       if (options.fallbackGenerator) {
         return options.fallbackGenerator();
       }
@@ -94,18 +97,19 @@ export class OpenAICompatibleProvider implements AIProvider {
   }
 }
 
-function getSecretKey(name: string): string | undefined {
+export function getSecretKey(name: string): string | undefined {
   if (typeof process !== 'undefined' && process.env?.[name]) {
     return process.env[name];
   }
   try {
-    // OpenNext Cloudflare runtime binding lookup
-    const { getCloudflareContext } = require('@opennextjs/cloudflare');
     const ctx = getCloudflareContext();
-    if (ctx?.env?.[name]) return ctx.env[name];
+    if ((ctx?.env as any)?.[name]) return (ctx.env as any)[name] as string;
   } catch {}
   if (typeof globalThis !== 'undefined' && (globalThis as any)?.[name]) {
     return (globalThis as any)[name];
+  }
+  if (typeof globalThis !== 'undefined' && (globalThis as any)?.env?.[name]) {
+    return (globalThis as any)?.env?.[name];
   }
   return undefined;
 }
