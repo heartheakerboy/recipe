@@ -13,6 +13,8 @@ interface RecipeCardBlockProps {
 export function RecipeCardBlock({ recipe }: RecipeCardBlockProps) {
   const recipeUrl = `https://flavornest.xyz/recipes/${recipe.slug}`;
 
+  const heroUrl = recipe.heroImage?.url || (recipe as any).heroImageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1200&h=800&q=80';
+
   return (
     <section
       id="recipe-card"
@@ -36,7 +38,7 @@ export function RecipeCardBlock({ recipe }: RecipeCardBlockProps) {
         <div className="flex items-center gap-2 shrink-0">
           <PinterestSaveButton
             url={recipeUrl}
-            media={recipe.heroImage.url}
+            media={heroUrl}
             description={recipe.shortDescription}
           />
         </div>

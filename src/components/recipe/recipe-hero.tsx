@@ -13,6 +13,8 @@ interface RecipeHeroProps {
 
 export function RecipeHero({ recipe }: RecipeHeroProps) {
   const recipeUrl = `https://flavornest.xyz/recipes/${recipe.slug}`;
+  const heroUrl = recipe.heroImage?.url || (recipe as any).heroImageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1200&h=800&q=80';
+  const heroAlt = recipe.heroImage?.altText || (recipe as any).heroImageAlt || recipe.title;
 
   return (
     <div className="space-y-6">
@@ -42,18 +44,18 @@ export function RecipeHero({ recipe }: RecipeHeroProps) {
       {/* Large Food Photography Hero with Pinterest Save Button */}
       <div className="relative rounded-2xl overflow-hidden border border-editorial-border shadow-card bg-editorial-surfaceAlt">
         <OptimizedImage
-          src={recipe.heroImage.url}
-          alt={recipe.heroImage.altText || recipe.title}
+          src={heroUrl}
+          alt={heroAlt}
           aspectRatioClass="aspect-recipe-hero"
           priority
-          pinMedia={recipe.heroImage.url}
+          pinMedia={heroUrl}
           pinDescription={recipe.shortDescription || recipe.title}
           pinUrl={recipeUrl}
         />
         <div className="absolute top-4 right-4 z-10">
           <PinterestSaveButton
             url={recipeUrl}
-            media={recipe.heroImage.url}
+            media={heroUrl}
             description={recipe.shortDescription || recipe.title}
             size="md"
           />
