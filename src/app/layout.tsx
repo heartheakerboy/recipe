@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import { Playfair_Display, Inter } from 'next/font/google';
 import './globals.css';
 import { Header } from '@/components/layout/header';
@@ -38,9 +39,28 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${serifFont.variable} ${sansFont.variable}`}>
       <head>
+        <meta
+          name="google-site-verification"
+          content="Jk2jEwct17Ro10RUCEOrTtAL1cFNkCiJy3NwJVzNYWc"
+        />
         <JsonLd data={[orgJsonLd, websiteJsonLd]} />
       </head>
       <body className="min-h-screen flex flex-col antialiased">
+        {/* Google tag (gtag.js) */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-H3MF7SYS6S"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', 'G-H3MF7SYS6S');
+          `}
+        </Script>
+
         <Header />
         <main className="flex-1">{children}</main>
         <Footer />

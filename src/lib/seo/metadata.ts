@@ -69,7 +69,7 @@ export function constructMetadata({
       images: [image],
     },
     verification: {
-      google: process.env.GOOGLE_SITE_VERIFICATION || undefined,
+      google: process.env.GOOGLE_SITE_VERIFICATION || 'Jk2jEwct17Ro10RUCEOrTtAL1cFNkCiJy3NwJVzNYWc',
       other: process.env.BING_WEBMASTER_VERIFICATION
         ? { 'msvalidate.01': process.env.BING_WEBMASTER_VERIFICATION }
         : undefined,
