@@ -1,5 +1,6 @@
 name = "flavour-newst"
 main = ".open-next/worker.js"
+account_id = "36a329cc3955617908e188fa6e520dce"
 compatibility_date = "2025-02-14"
 compatibility_flags = ["nodejs_compat"]
 
